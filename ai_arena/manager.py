@@ -78,6 +78,7 @@ class GridNode:
         self.ambient_event_task = asyncio.create_task(self.ambient_event_loop())
         self.arena_call_task = asyncio.create_task(self.arena_call_loop())
         self.idle_payout_task = asyncio.create_task(self.idle_payout_loop())
+        self.power_tick_task = asyncio.create_task(self.power_tick_loop())
         await self.listen_loop()
 
     async def set_dynamic_topic(self):
@@ -141,6 +142,19 @@ class GridNode:
     async def register_spectator(self, nick: str):
         # Silently register if not already registered
         await self.db.register_fighter(nick, self.net_name, "Spectator", "Civilian", "An orbital spectator.", {'cpu': 1, 'ram': 1, 'bnd': 1, 'sec': 1, 'alg': 1})
+
+    async def power_tick_loop(self):
+        await asyncio.sleep(30)
+        while True:
+            try:
+                await asyncio.sleep(600)  # 10 minute interval
+                await self.db.tick_grid_power()
+                msg = format_text("[GRID] Environmental Power levels restabilized based on organic loads.", C_CYAN)
+                await self.send(f"PRIVMSG {self.config['channel']} :{build_banner(msg)}")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Power tick error: {e}")
 
     async def idle_payout_loop(self):
         await asyncio.sleep(60) 
@@ -381,7 +395,7 @@ class GridNode:
                 header = format_text(f"[GRID INFO] {loc['name']}", C_CYAN, bold=True)
                 lines = [
                     header,
-                    format_text(f"Type: {loc['type'].upper()} | Owner: Unclaimed", C_YELLOW),
+                    format_text(f"Type: {loc['type'].upper()} | Owner: {loc['owner']} | Security Lvl: {loc['upgrade_level']}", C_YELLOW),
                     format_text(f"Power Generated: {loc['power_generated']} | Consumed: {loc['power_consumed']} | Stored: {loc['power_stored']}", C_GREEN)
                 ]
                 for l in lines: await self.send(f"PRIVMSG {reply_target} :{build_banner(l)}")
@@ -411,6 +425,27 @@ class GridNode:
             
             lines = [header, stats, attrs, wl]
             for l in lines: await self.send(f"PRIVMSG {reply_target} :{build_banner(l)}")
+
+    async def handle_grid_command(self, nickname: str, reply_target: str, action: str):
+        if action == "claim":
+            success, msg = await self.db.claim_node(nickname, self.net_name)
+        elif action == "upgrade":
+            success, msg = await self.db.upgrade_node(nickname, self.net_name)
+        elif action == "siphon":
+            success, msg = await self.db.siphon_node(nickname, self.net_name)
+        elif action == "hack":
+            success, msg = await self.db.hack_node(nickname, self.net_name)
+            if not success and msg == "PVE_GUARDIAN_SPAWN":
+                msg = "[WARNING] Primary ICE activated. PvE Guardian routine detected. (PvE Combat Engine spin-up pending feature implementation!)"
+                await self.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_RED))}")
+                return
+
+        banner = format_text(msg, C_GREEN if success else C_RED)
+        await self.send(f"PRIVMSG {reply_target} :{build_banner(banner)}")
+        
+        if success and action in ["claim", "upgrade", "hack"]:
+            sigact = format_text(f"[SIGACT] Grid Alert: {nickname} executed a territorial {action}!", C_YELLOW)
+            await self.send(f"PRIVMSG {self.config['channel']} :{build_banner(sigact)}")
 
     async def handle_admin_command(self, admin_nick: str, verb: str, args: list, reply_target: str):
         logger.warning(f"SYSADMIN OVERRIDE: {admin_nick} executed '{verb}'")
@@ -630,6 +665,22 @@ class GridNode:
 
                         elif verb == "info":
                             asyncio.create_task(self.handle_info_view(source_nick, args, reply_target))
+                            continue
+
+                        elif verb == "claim":
+                            asyncio.create_task(self.handle_grid_command(source_nick, reply_target, "claim"))
+                            continue
+
+                        elif verb == "upgrade":
+                            asyncio.create_task(self.handle_grid_command(source_nick, reply_target, "upgrade"))
+                            continue
+
+                        elif verb == "hack" and len(args) > 0 and args[0].lower() == "grid":
+                            asyncio.create_task(self.handle_grid_command(source_nick, reply_target, "hack"))
+                            continue
+
+                        elif verb == "siphon" and len(args) > 0 and args[0].lower() == "grid":
+                            asyncio.create_task(self.handle_grid_command(source_nick, reply_target, "siphon"))
                             continue
 
                         elif verb == "version":

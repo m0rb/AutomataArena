@@ -211,7 +211,9 @@ class ArenaDB:
             ).options(
                 selectinload(Character.current_node)
                 .selectinload(GridNode.exits)
-                .selectinload(NodeConnection.target_node)
+                .selectinload(NodeConnection.target_node),
+                selectinload(Character.current_node)
+                .selectinload(GridNode.owner)
             )
             result = await session.execute(stmt)
             char = result.scalars().first()
@@ -231,6 +233,8 @@ class ArenaDB:
                 'power_stored': node.power_stored,
                 'power_consumed': node.power_consumed,
                 'power_generated': node.power_generated,
+                'owner': node.owner.name if node.owner else "Unclaimed",
+                'upgrade_level': node.upgrade_level,
             }
 
     async def move_fighter(self, name, network, direction):
@@ -362,6 +366,119 @@ class ArenaDB:
                 loser.elo = max(0, loser.elo - 15)
                 loser.xp += 10
             
+            await session.commit()
+
+    async def claim_node(self, name, network):
+        async with self.async_session() as session:
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                Character.name == name,
+                NetworkAlias.nickname == name,
+                NetworkAlias.network_name == network
+            ).options(selectinload(Character.current_node))
+            char = (await session.execute(stmt)).scalars().first()
+            if not char or not char.current_node: return False, "System offline."
+            node = char.current_node
+            
+            if node.owner_character_id:
+                if node.owner_character_id == char.id:
+                    return False, "You already command this node."
+                return False, "This node is controlled by a rival. You must seize it."
+                
+            node.owner_character_id = char.id
+            await session.commit()
+            return True, f"Control established over {node.name}."
+
+    async def upgrade_node(self, name, network):
+        async with self.async_session() as session:
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                Character.name == name,
+                NetworkAlias.nickname == name,
+                NetworkAlias.network_name == network
+            ).options(selectinload(Character.current_node))
+            char = (await session.execute(stmt)).scalars().first()
+            if not char or not char.current_node: return False, "System offline."
+            node = char.current_node
+            if node.owner_character_id != char.id: return False, "You do not command this node."
+            
+            cost = node.upgrade_level * 500
+            if char.credits < cost: return False, f"Insufficient credits. Upgrade requires {cost}c."
+            
+            char.credits -= cost
+            node.upgrade_level += 1
+            await session.commit()
+            return True, f"Upgraded {node.name} to Level {node.upgrade_level} for {cost}c! Max Capacity increased."
+
+    async def siphon_node(self, name, network):
+        async with self.async_session() as session:
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                Character.name == name,
+                NetworkAlias.nickname == name,
+                NetworkAlias.network_name == network
+            ).options(selectinload(Character.current_node))
+            char = (await session.execute(stmt)).scalars().first()
+            if not char or not char.current_node: return False, "System offline."
+            node = char.current_node
+            
+            if not node.owner_character_id: return False, "Node is already Unclaimed. Type '{config.prefix} claim' to seize it."
+            if node.owner_character_id == char.id: return False, "You cannot siphon your own node."
+            if node.upgrade_level > 2: return False, "Cannot siphon a heavily upgraded node. Security ICE is too high."
+            
+            siphon_amount = min(50.0, node.power_stored)
+            node.power_stored -= siphon_amount
+            char.credits += siphon_amount * 2 
+            
+            if node.power_stored <= 0:
+                node.power_stored = 0
+                node.owner_character_id = None
+                await session.commit()
+                return True, f"You siphoned {siphon_amount} power and crashed the grid. The node is now Unclaimed."
+                
+            await session.commit()
+            return True, f"You siphoned {siphon_amount} power. The node is destabilizing."
+
+    async def hack_node(self, name, network):
+        import random
+        async with self.async_session() as session:
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                Character.name == name,
+                NetworkAlias.nickname == name,
+                NetworkAlias.network_name == network
+            ).options(selectinload(Character.current_node).selectinload(GridNode.owner))
+            char = (await session.execute(stmt)).scalars().first()
+            if not char or not char.current_node: return False, "System offline."
+            node = char.current_node
+            
+            if not node.owner_character_id: return False, "Node is Unclaimed."
+            if node.owner_character_id == char.id: return False, "You already own this node."
+            
+            max_power = node.upgrade_level * 100
+            if node.power_stored >= max_power * 0.9:
+                return False, "PVE_GUARDIAN_SPAWN"
+            
+            roll = random.randint(1, 20) + char.alg
+            difficulty = 10 + (node.upgrade_level * 2)
+            
+            if roll >= difficulty:
+                old_owner = node.owner.name if node.owner else "Unknown"
+                node.owner_character_id = char.id
+                await session.commit()
+                return True, f"Hack Successful (Rolled {roll} vs DC {difficulty}). You violently stripped command from {old_owner}!"
+            else:
+                char.credits = max(0.0, char.credits - 50.0) # Penalty
+                await session.commit()
+                return False, f"Hack Failed (Rolled {roll} vs DC {difficulty}). The ICE rejected your intrusion and fined you 50c."
+
+    async def tick_grid_power(self):
+        async with self.async_session() as session:
+            stmt = select(GridNode).options(selectinload(GridNode.characters_present))
+            nodes = (await session.execute(stmt)).scalars().all()
+            for node in nodes:
+                occupants = len(node.characters_present)
+                if occupants > 0 and node.owner_character_id:
+                    generated = occupants * 5.0
+                    max_power = node.upgrade_level * 100.0
+                    node.power_generated += generated
+                    node.power_stored = min(max_power, node.power_stored + generated)
             await session.commit()
 
 async def async_main():

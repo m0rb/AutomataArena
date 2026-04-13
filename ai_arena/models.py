@@ -15,12 +15,16 @@ class GridNode(Base):
     description = Column(String)
     node_type = Column(String, default="wilderness")  # wilderness, arena, merchant, safezone
     owner_alliance_id = Column(Integer, nullable=True) # For Territory Control
+    owner_character_id = Column(Integer, ForeignKey('characters.id'), nullable=True)
+    upgrade_level = Column(Integer, default=1)
+    
     power_stored = Column(Float, default=0.0)
     power_consumed = Column(Float, default=0.0)
     power_generated = Column(Float, default=0.0)
     
     # Relationships
-    characters_present = relationship("Character", back_populates="current_node")
+    owner = relationship("Character", foreign_keys=[owner_character_id])
+    characters_present = relationship("Character", foreign_keys="[Character.node_id]", back_populates="current_node")
     # Connections as source
     exits = relationship("NodeConnection", foreign_keys="[NodeConnection.source_node_id]", back_populates="source_node")
 

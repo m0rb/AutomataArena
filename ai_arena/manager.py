@@ -172,6 +172,10 @@ class GridNode:
             if nick not in self.ready_players:
                 self.ready_players.append(nick)
                 await self.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'[AUTH OK] {nick} validated. Standby for drop.', C_GREEN))}")
+                
+                sigact = format_text(f"[SIGACT] {nick} locked into the drop pod.", C_YELLOW)
+                await self.send(f"PRIVMSG {self.config['channel']} :{build_banner(sigact)}")
+                
                 await self.check_match_start()
         else:
             await self.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'[AUTH FAIL] {nick} Cryptographic mismatch.', C_RED))}")
@@ -307,6 +311,11 @@ class GridNode:
             await self.send(f"PRIVMSG {reply_target} :{build_banner(banner)}")
         else:
             await self.send(f"PRIVMSG {reply_target} :{msg}")
+            
+        if result:
+            act = "purchased" if verb == "buy" else "liquidated"
+            sigact = format_text(f"[SIGACT] {nickname} {act} equipment on the Black Market.", C_CYAN)
+            await self.send(f"PRIVMSG {self.config['channel']} :{build_banner(sigact)}")
 
     async def handle_grid_view(self, nickname: str, reply_target: str):
         loc = await self.db.get_location(nickname, self.net_name)
@@ -606,6 +615,8 @@ class GridNode:
                             if loc and loc['type'] == 'arena':
                                 if source_nick not in self.match_queue: 
                                     self.match_queue.append(source_nick)
+                                    sigact = format_text(f"[SIGACT] {source_nick} stepped into the Gladiator Queue!", C_YELLOW)
+                                    await self.send(f"PRIVMSG {self.config['channel']} :{build_banner(sigact)}")
                                 await self.send(f"PRIVMSG {reply_target} :{build_banner(f'{source_nick} is in the queue. DM me: {self.prefix} ready <token>')}")
                             else:
                                 err = format_text(f"You must travel to The Arena to queue up. You are currently at {loc['name'] if loc else 'unknown'}.", C_RED)

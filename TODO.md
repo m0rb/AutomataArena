@@ -13,7 +13,7 @@ This document tracks active or upcoming, near-term tasks for AutomataArena.
 - [ ] Spectator Functionality (implement spectator item drops)
 - [x] Rework Pulse Logic (remove 60s generic pulse, only pulse on queue/combat)
 - [x] Ambient World Ticker (dynamic weather, events, lore via LLM)
-- [ ] Public Echoes/SIGACTs (public channel messages for major MUD actions)
+- [x] Public Echoes/SIGACTs (public channel messages for major MUD actions)
 - [ ] Add `x options` command (player/spectator account settings for message type, auto sell trash, reminders, tutorial mode)
 - [x] Add `x news` command displays LLM generated news related to the grid world or arena 
 - [ ] Add `x info` Lists player information like level, rank, stats, difficulty, score, and weapons. Check a player on the grid or arena. 'x info <player> <grid/arena>' 'x info' shows your info. 'x info grid' shows grid info. 'x info arena' shows arena info.

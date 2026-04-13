@@ -74,6 +74,7 @@ class GridNode:
         await self.send(f"NICK {self.config['nickname']}")
         await self.send(f"USER {self.config['nickname']} 0 * :AutomataArena Master Node")
         self.hype_task = asyncio.create_task(self.hype_loop())
+        self.ambient_event_task = asyncio.create_task(self.ambient_event_loop())
         await self.listen_loop()
 
     async def set_dynamic_topic(self):
@@ -98,6 +99,25 @@ class GridNode:
                 break
             except Exception as e:
                 logger.error(f"Hype loop error: {e}")
+
+    async def ambient_event_loop(self):
+        await asyncio.sleep(120)  # Offset start 
+        while True:
+            try:
+                await asyncio.sleep(600)  # 10 minute interval
+                
+                # Check for silence...
+                if not self.active_engine or not self.active_engine.active:
+                    event = await self.llm.generate_ambient_event()
+                    cat = event.get('category', 'SYS').upper()
+                    msg = event.get('message', '')
+                    
+                    alert = format_text(f"[{cat}] {msg}", C_CYAN, True)
+                    await self.send(f"PRIVMSG {self.config['channel']} :{build_banner(alert)}")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Ambient event loop error: {e}")
 
     async def handle_ready(self, nick: str, token: str, reply_target: str):
         if await self.db.authenticate_fighter(nick, self.net_name, token):
@@ -275,6 +295,21 @@ class GridNode:
             
         footer = format_text(f"To buy, travel to a Merchant node and type '{self.prefix} buy <item>'.", C_YELLOW)
         await self.send(f"PRIVMSG {reply_target} :{build_banner(footer)}")
+
+    async def handle_news_view(self, nickname: str, reply_target: str):
+        compile_msg = format_text("[ ESTABLISHING SECURE UPLINK TO NEWS SERVER... ]", C_YELLOW)
+        await self.send(f"PRIVMSG {reply_target} :{build_banner(compile_msg)}")
+        
+        news_text = await self.llm.generate_news(self.net_name)
+        
+        header = format_text("[ BREAKING NEWS REPORT ]", C_CYAN, bold=True)
+        await self.send(f"PRIVMSG {reply_target} :{build_banner(header)}")
+        
+        # Split news securely in case it's a massive block
+        import textwrap
+        wrapped = textwrap.wrap(news_text, width=200)
+        for line in wrapped:
+            await self.send(f"PRIVMSG {reply_target} :{build_banner(format_text(line, C_YELLOW))}")
 
     async def handle_admin_command(self, admin_nick: str, verb: str, args: list, reply_target: str):
         logger.warning(f"SYSADMIN OVERRIDE: {admin_nick} executed '{verb}'")
@@ -458,6 +493,10 @@ class GridNode:
                             asyncio.create_task(self.handle_shop_view(source_nick, reply_target))
                             continue
 
+                        elif verb == "news":
+                            asyncio.create_task(self.handle_news_view(source_nick, reply_target))
+                            continue
+
                         elif verb == "version":
                             versions = (
                                 f"[MODULES] manager: v1.2.0 | arena_db: v2.0.0 | "
@@ -564,6 +603,7 @@ class MasterHub:
         asyncio.create_task(self.db.close())
         for node in self.nodes.values():
             if node.hype_task: node.hype_task.cancel()
+            if hasattr(node, 'ambient_event_task') and node.ambient_event_task: node.ambient_event_task.cancel()
             if node.writer: node.writer.write(b"QUIT :SysAdmin closed the grid.\r\n")
         if hasattr(self, 'loop_task'):
             self.loop_task.cancel()

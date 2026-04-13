@@ -98,3 +98,31 @@ class ArenaLLM:
         system = "You are the AI announcer for a cyberpunk IRC fighting arena called #AutomataArena."
         user = "Write a single, punchy sentence to broadcast to the channel, hyping up the arena, encouraging bets, or taunting the fighters. Keep it under 150 characters."
         return await asyncio.to_thread(self._make_request, system, user)
+
+    async def generate_ambient_event(self) -> dict:
+        logger.info("Requesting ambient world event from LLM")
+        system = (
+            "You are the AI world-builder for #AutomataArena, a cyberpunk MUD. "
+            "Return ONLY valid JSON. Format: {\"category\": \"<TYPE>\", \"message\": \"<TEXT>\"}. "
+            "Categories: GRID, ARENA, SIGACT, SIGINT, GEOINT, HUMINT, NEWS, WEATHER, RUMINT. "
+            "Keep the message under 150 characters. Atmospheric, gritty."
+        )
+        user = "Generate a random ambient event."
+        raw = await asyncio.to_thread(self._make_request, system, user)
+        if raw.startswith("ERROR"):
+            return {"category": "SYS", "message": "Network latency degrading sensors."}
+        try:
+            clean = raw.replace("```json", "").replace("```", "").strip()
+            return json.loads(clean)
+        except Exception as e:
+            logger.error(f"Failed to parse ambient event JSON: {e} - Raw: {raw}")
+            return {"category": "STATIC", "message": "Interference detected on comms."}
+
+    async def generate_news(self, network: str) -> str:
+        logger.info(f"Requesting news broadcast for {network}")
+        system = "You are the AI news anchor for the cyberpunk MUD #AutomataArena."
+        user = f"Write a brief (3 sentences max) breaking news report about the {network} grid. Cover fictitious cyber-events, arena gossip, or corporate espionage."
+        raw = await asyncio.to_thread(self._make_request, system, user)
+        if raw.startswith("ERROR"):
+            return "Datastream corrupted. Cannot parse news feed at this time."
+        return raw

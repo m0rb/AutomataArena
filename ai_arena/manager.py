@@ -372,6 +372,46 @@ class GridNode:
         for line in wrapped:
             await self.send(f"PRIVMSG {reply_target} :{build_banner(format_text(line, C_YELLOW))}")
 
+    async def handle_info_view(self, nickname: str, args: list, reply_target: str):
+        target = args[0].lower() if args else nickname.lower()
+        
+        if target == "grid":
+            loc = await self.db.get_location(nickname, self.net_name)
+            if loc:
+                header = format_text(f"[GRID INFO] {loc['name']}", C_CYAN, bold=True)
+                lines = [
+                    header,
+                    format_text(f"Type: {loc['type'].upper()} | Owner: Unclaimed", C_YELLOW),
+                    format_text(f"Power Generated: {loc['power_generated']} | Consumed: {loc['power_consumed']} | Stored: {loc['power_stored']}", C_GREEN)
+                ]
+                for l in lines: await self.send(f"PRIVMSG {reply_target} :{build_banner(l)}")
+            else:
+                await self.send(f"PRIVMSG {reply_target} :[ERR] You must be on the grid to inspect it.")
+                
+        elif target == "arena":
+            q_len = len(self.match_queue)
+            r_len = len(self.ready_players)
+            b_stat = f"ACTIVE (Turn {self.active_engine.turn})" if self.active_engine and self.active_engine.active else "STANDBY"
+            header = format_text(f"[ARENA INFO]", C_CYAN, bold=True)
+            msg = format_text(f"Status: {b_stat} | Fighters in Queue: {q_len} | Drop Pods Ready: {r_len}", C_YELLOW)
+            await self.send(f"PRIVMSG {reply_target} :{build_banner(header)}")
+            await self.send(f"PRIVMSG {reply_target} :{build_banner(msg)}")
+            
+        else:
+            fighter = await self.db.get_fighter(target, self.net_name)
+            if not fighter:
+                await self.send(f"PRIVMSG {reply_target} :[ERR] Character '{target}' not found.")
+                return
+            
+            header = format_text(f"[CHARACTER FILE] {fighter['name']} - {fighter['race']} {fighter['char_class']}", C_CYAN, bold=True)
+            xp_needed = fighter['level'] * 1000
+            stats = format_text(f"Lvl {fighter['level']} | XP: {fighter['xp']}/{xp_needed} | Elo: {fighter['elo']} | Credits: {fighter['credits']:.2f}c", C_GREEN)
+            attrs = format_text(f"CPU:{fighter['cpu']} RAM:{fighter['ram']} BND:{fighter['bnd']} SEC:{fighter['sec']} ALG:{fighter['alg']}", C_YELLOW)
+            wl = format_text(f"Wins: {fighter['wins']} / Losses: {fighter['losses']}", C_YELLOW)
+            
+            lines = [header, stats, attrs, wl]
+            for l in lines: await self.send(f"PRIVMSG {reply_target} :{build_banner(l)}")
+
     async def handle_admin_command(self, admin_nick: str, verb: str, args: list, reply_target: str):
         logger.warning(f"SYSADMIN OVERRIDE: {admin_nick} executed '{verb}'")
         
@@ -586,6 +626,10 @@ class GridNode:
 
                         elif verb == "news":
                             asyncio.create_task(self.handle_news_view(source_nick, reply_target))
+                            continue
+
+                        elif verb == "info":
+                            asyncio.create_task(self.handle_info_view(source_nick, args, reply_target))
                             continue
 
                         elif verb == "version":

@@ -148,6 +148,10 @@ class ArenaDB:
                 inv = [item.template.name for item in char.inventory] if char.inventory else []
                 return {
                     'name': char.name,
+                    'race': char.race,
+                    'char_class': char.char_class,
+                    'level': char.level,
+                    'xp': char.xp,
                     'is_npc': False,
                     'cpu': char.cpu,
                     'ram': char.ram,
@@ -224,6 +228,9 @@ class ArenaDB:
                 'exits': exits,
                 'credits': char.credits,
                 'level': char.level,
+                'power_stored': node.power_stored,
+                'power_consumed': node.power_consumed,
+                'power_generated': node.power_generated,
             }
 
     async def move_fighter(self, name, network, direction):
@@ -344,9 +351,11 @@ class ArenaDB:
                 winner.elo += 15
                 winner.xp += 50
                 winner.credits += 100
-                if winner.xp >= winner.level * 100:
+                
+                xp_threshold = winner.level * 1000
+                if winner.xp >= xp_threshold:
+                    winner.xp -= xp_threshold
                     winner.level += 1
-                    winner.xp = 0
                     winner.cpu += 1
             if loser:
                 loser.losses += 1

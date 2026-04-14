@@ -56,6 +56,8 @@ class GridNode:
         self.pending_pings = {}
         self.channel_users = {}
         self.action_timestamps = {}
+        self.pending_registrations = {}  # nick -> asyncio.Task for delayed spectator reg
+        self.nickserv_verified = set()   # nicks confirmed registered with NickServ
         
         raw_admins = CONFIG.get('admins', [])
         if isinstance(raw_admins, str):
@@ -140,9 +142,39 @@ class GridNode:
             alert = format_text("[ARENA CALL] The Gladiator Gates are open. Travel to The Arena node to 'queue'!", C_YELLOW, True)
             await self.send(f"PRIVMSG {self.config['channel']} :{build_banner(alert)}")
 
-    async def register_spectator(self, nick: str):
-        # Silently register if not already registered
-        await self.db.register_fighter(nick, self.net_name, "Spectator", "Civilian", "An orbital spectator.", {'cpu': 1, 'ram': 1, 'bnd': 1, 'sec': 1, 'alg': 1})
+    async def request_nickserv_check(self, nick: str):
+        """Send WHO with flags to check if nick is identified with NickServ (+r mode)."""
+        # IRC extended WHO: %na gives us account name in a 354 response
+        await self.send(f"WHO {nick} %na")
+
+    async def schedule_spectator_registration(self, nick: str):
+        """Wait 5 minutes, then register as Spectator if NickServ-verified and unknown."""
+        try:
+            await asyncio.sleep(300)  # 5 minute idle gate
+            nick_lower = nick.lower()
+            # Only proceed if still in channel and NickServ verified
+            if nick_lower not in self.channel_users:
+                return
+            if nick_lower not in self.nickserv_verified:
+                logger.debug(f"[{self.net_name}] Skipping auto-reg for {nick}: not NickServ-identified.")
+                return
+            existing = await self.db.get_fighter(nick_lower, self.net_name)
+            if not existing:
+                logger.info(f"[{self.net_name}] Auto-registering {nick} as Spectator after 5min idle + NickServ check.")
+                await self.db.register_fighter(nick_lower, self.net_name, "Spectator", "Civilian", "An orbital spectator.", {'cpu': 1, 'ram': 1, 'bnd': 1, 'sec': 1, 'alg': 1})
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self.pending_registrations.pop(nick.lower(), None)
+
+    def _start_registration_timer(self, nick: str):
+        """Kick off NickServ check + 5-min timer for a new nick."""
+        nick_lower = nick.lower()
+        if nick_lower in self.pending_registrations:
+            return  # Already scheduled
+        asyncio.create_task(self.request_nickserv_check(nick_lower))
+        task = asyncio.create_task(self.schedule_spectator_registration(nick_lower))
+        self.pending_registrations[nick_lower] = task
 
     async def power_tick_loop(self):
         await asyncio.sleep(30)
@@ -622,15 +654,31 @@ class GridNode:
                 if command not in ["PONG", "PING", "NOTICE"]:
                     logger.debug(f"[{self.net_name}] < {line}")
 
+                if command == "354":  # Extended WHO reply: params are nick and account
+                    # Format: :server 354 botnick nick account
+                    who_parts = line.split()
+                    # Find nick and acct fields from "WHO nick %na" response
+                    # Typical: :server 354 botnick 0 nick account
+                    if len(who_parts) >= 5:
+                        who_nick = who_parts[4].lower() if len(who_parts) > 4 else ""
+                        who_acct = who_parts[5] if len(who_parts) > 5 else "0"
+                        if who_nick and who_acct != "0" and who_acct != "":
+                            self.nickserv_verified.add(who_nick)
+                            logger.debug(f"[{self.net_name}] NickServ verified: {who_nick} (acct: {who_acct})")
+                    continue
+
                 if command == "353":
                     nicks = msg.replace('@', '').replace('+', '').split()
                     import time
                     now = time.time()
                     for n in nicks:
                         clean_nick = n.split('!')[0].lower()
-                        if clean_nick not in self.channel_users and clean_nick != self.config['nickname'].lower():
+                        if clean_nick == self.config['nickname'].lower():
+                            continue
+                        if clean_nick not in self.channel_users:
                             self.channel_users[clean_nick] = {'join_time': now, 'chat_lines': 0}
-                            asyncio.create_task(self.register_spectator(clean_nick))
+                            self._start_registration_timer(clean_nick)
+                        # If already known, just leave their record intact (they're idle)
                     continue
 
                 if command in ["376", "422"]:
@@ -649,10 +697,11 @@ class GridNode:
                     target_chan = msg if msg else target
                     if target_chan.lower() == self.config['channel'].lower() and source_nick.lower() != self.config['nickname'].lower():
                         import time
-                        if source_nick.lower() not in self.channel_users:
-                            self.channel_users[source_nick.lower()] = {'join_time': time.time(), 'chat_lines': 0}
-                            asyncio.create_task(self.register_spectator(source_nick.lower()))
-                            
+                        nick_lower = source_nick.lower()
+                        if nick_lower not in self.channel_users:
+                            self.channel_users[nick_lower] = {'join_time': time.time(), 'chat_lines': 0}
+                            self._start_registration_timer(nick_lower)
+                        # If already known, they're returning — no re-registration
                         welcome = format_text(f"Welcome to the Grid, {source_nick}. Type {self.prefix} help to begin.", C_CYAN)
                         await self.send(f"PRIVMSG {self.config['channel']} :{build_banner(welcome)}")
                     continue
@@ -673,11 +722,12 @@ class GridNode:
 
                     if is_channel_msg:
                         import time
-                        if source_nick.lower() not in self.channel_users:
-                            self.channel_users[source_nick.lower()] = {'join_time': time.time(), 'chat_lines': 1}
-                            asyncio.create_task(self.register_spectator(source_nick.lower()))
+                        nick_lower = source_nick.lower()
+                        if nick_lower not in self.channel_users:
+                            self.channel_users[nick_lower] = {'join_time': time.time(), 'chat_lines': 1}
+                            self._start_registration_timer(nick_lower)
                         else:
-                            self.channel_users[source_nick.lower()]['chat_lines'] += 1
+                            self.channel_users[nick_lower]['chat_lines'] += 1
 
                     if first_word == self.prefix and len(cmd_parts) >= 2:
                         verb = cmd_parts[1].lower()

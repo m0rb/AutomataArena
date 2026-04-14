@@ -617,7 +617,8 @@ async def async_main():
 
     subparsers.add_parser("init", help="Initialize the database schema")
     list_parser = subparsers.add_parser("list", help="List all registered fighters")
-    list_parser.add_argument("--network", type=str, help="Filter by IRC network")
+    del_parser = subparsers.add_parser("delete", help="Delete a player")
+    del_parser.add_argument("--name", type=str, required=True, help="Player nickname")
 
     args = parser.parse_args()
     db = ArenaDB()
@@ -634,6 +635,16 @@ async def async_main():
             wl = f"{f['wins']}/{f['losses']}"
             print(f"{f['name']:<15} | {f['network']:<10} | {f['elo']:<6} | {wl:<7} | {f['credits']}")
         print()
+    elif args.command == "delete":
+        async with db.async_session() as session:
+            stmt = select(Player).join(NetworkAlias).where(NetworkAlias.nickname.ilike(args.name))
+            p = (await session.execute(stmt)).scalars().first()
+            if p:
+                await session.delete(p)
+                await session.commit()
+                print(f"[*] Player {args.name} deleted.")
+            else:
+                print(f"[!] Player {args.name} not found.")
     else:
         parser.print_help()
         

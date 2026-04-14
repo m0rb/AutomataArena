@@ -125,6 +125,213 @@ class ArenaDB:
             await session.commit()
             return True
 
+    # ------------------------------------------------------------------
+    # MOB ROSTER: (cpu, ram, bnd, sec, alg, xp_reward, credit_reward)
+    # ------------------------------------------------------------------
+    MOB_ROSTER = {
+        1: {"name": "Rogue_Process",  "cpu": 2, "ram": 2, "bnd": 2, "sec": 1, "alg": 1, "xp": 15, "credits": 10},
+        2: {"name": "ICE_Drone",      "cpu": 3, "ram": 3, "bnd": 2, "sec": 2, "alg": 2, "xp": 25, "credits": 20},
+        3: {"name": "Phantom_Script", "cpu": 4, "ram": 4, "bnd": 3, "sec": 3, "alg": 3, "xp": 40, "credits": 35},
+    }
+
+    LOOT_TABLE = ["Data_Shard", "Memory_Fragment", "Corrupted_Bit"]
+
+    GRID_EXPANSION = [
+        # (name, description, node_type, threat_level)
+        ("Neural_Nexus",        "A secondary uplink hub. Neon architecture hums with safe traffic.", "safezone",   0),
+        ("Memory_Heap",         "Scattered RAM towers leak stray processes. Weak rogues lurk here.", "wilderness", 1),
+        ("Kernel_Deep",         "The OS core. Deeper processes patrol this sector.",                  "wilderness", 2),
+        ("Null_Space",          "Unallocated void. Corrupted scripts dwell at maximum density.",      "wilderness", 3),
+        ("Shadow_Sector",       "Dark subnet. Freelance ICE patrols the western edge.",               "wilderness", 1),
+        ("Void_Sector",         "Signal degrades to near-zero. Dangerous static.",                    "wilderness", 2),
+        ("Stack_Overflow",      "Recursive loops fill this dead-end with unstable daemons.",          "wilderness", 3),
+        ("Cache_Cluster",       "Hot cache banks. ICE drones guard the processing lanes.",            "wilderness", 2),
+        ("Datacore_Alpha",      "Corporate safezone. Clean architecture, strict access.",              "safezone",   0),
+        ("Firewall_Perimeter",  "The edge of the mapped grid. Hostile ICE wall ahead.",               "wilderness", 3),
+        ("Dark_Web_Exchange",   "A second black market node. Riskier, deeper in the south.",          "merchant",   0),
+        ("Logic_Gate",          "Automated logic processors gone feral. Mid-level threat.",            "wilderness", 2),
+        ("Gladiator_Pit",       "A second combat arena — rawer, less regulated than The_Arena.",      "arena",      0),
+    ]
+
+    GRID_CONNECTIONS = [
+        # (source_name, target_name, direction), bidirectional pairs
+        # North spoke: Uplink → Neural_Nexus → Memory_Heap → Kernel_Deep → Null_Space
+        ("The_Grid_Uplink", "Neural_Nexus",   "north"), ("Neural_Nexus",   "The_Grid_Uplink", "south"),
+        ("Neural_Nexus",    "Memory_Heap",    "north"), ("Memory_Heap",    "Neural_Nexus",    "south"),
+        ("Memory_Heap",     "Kernel_Deep",    "north"), ("Kernel_Deep",    "Memory_Heap",     "south"),
+        ("Kernel_Deep",     "Null_Space",     "north"), ("Null_Space",     "Kernel_Deep",     "south"),
+        # West spoke: Uplink → Shadow_Sector → Void_Sector → Stack_Overflow
+        ("The_Grid_Uplink", "Shadow_Sector",  "west"),  ("Shadow_Sector",  "The_Grid_Uplink", "east"),
+        ("Shadow_Sector",   "Void_Sector",    "west"),  ("Void_Sector",    "Shadow_Sector",   "east"),
+        ("Void_Sector",     "Stack_Overflow", "west"),  ("Stack_Overflow", "Void_Sector",     "east"),
+        # East spoke: Uplink → CPU_Socket → Cache_Cluster → Datacore_Alpha → Firewall_Perimeter
+        ("The_CPU_Socket",  "Cache_Cluster",  "east"),  ("Cache_Cluster",  "The_CPU_Socket",  "west"),
+        ("Cache_Cluster",   "Datacore_Alpha", "east"),  ("Datacore_Alpha", "Cache_Cluster",   "west"),
+        ("Datacore_Alpha",  "Firewall_Perimeter", "east"), ("Firewall_Perimeter", "Datacore_Alpha", "west"),
+        # South spoke: Uplink → Black_Market_Port → Dark_Web_Exchange → Logic_Gate
+        ("Black_Market_Port",   "Dark_Web_Exchange", "south"), ("Dark_Web_Exchange", "Black_Market_Port",   "north"),
+        ("Dark_Web_Exchange",   "Logic_Gate",        "south"), ("Logic_Gate",        "Dark_Web_Exchange",   "north"),
+        # Arena: The_Arena → Gladiator_Pit
+        ("The_Arena",      "Gladiator_Pit",  "east"),  ("Gladiator_Pit",  "The_Arena",       "west"),
+    ]
+
+    LOOT_TEMPLATES = [
+        {"name": "Data_Shard",      "item_type": "junk", "base_value": 5,  "effects_json": "{}"},
+        {"name": "Memory_Fragment", "item_type": "junk", "base_value": 8,  "effects_json": "{}"},
+        {"name": "Corrupted_Bit",   "item_type": "junk", "base_value": 3,  "effects_json": "{}"},
+    ]
+
+    async def seed_grid_expansion(self):
+        """Non-destructively seed new nodes, connections, and loot templates.
+        Safe to call on an existing live DB — skips anything that already exists."""
+        async with self.async_session() as session:
+            # 1. Seed new item templates
+            for tpl_data in self.LOOT_TEMPLATES:
+                exists = (await session.execute(
+                    select(ItemTemplate).where(ItemTemplate.name == tpl_data["name"])
+                )).scalars().first()
+                if not exists:
+                    session.add(ItemTemplate(**tpl_data))
+
+            await session.flush()
+
+            # 2. Seed new grid nodes
+            for name, desc, node_type, threat in self.GRID_EXPANSION:
+                exists = (await session.execute(
+                    select(GridNode).where(GridNode.name == name)
+                )).scalars().first()
+                if not exists:
+                    session.add(GridNode(
+                        name=name, description=desc,
+                        node_type=node_type, threat_level=threat
+                    ))
+
+            await session.flush()
+
+            # 3. Seed new connections (skip if source→target→direction already exists)
+            for src_name, tgt_name, direction in self.GRID_CONNECTIONS:
+                src = (await session.execute(
+                    select(GridNode).where(GridNode.name == src_name)
+                )).scalars().first()
+                tgt = (await session.execute(
+                    select(GridNode).where(GridNode.name == tgt_name)
+                )).scalars().first()
+                if not src or not tgt:
+                    continue
+                exists = (await session.execute(
+                    select(NodeConnection).where(
+                        NodeConnection.source_node_id == src.id,
+                        NodeConnection.target_node_id == tgt.id,
+                        NodeConnection.direction == direction
+                    )
+                )).scalars().first()
+                if not exists:
+                    session.add(NodeConnection(
+                        source_node_id=src.id,
+                        target_node_id=tgt.id,
+                        direction=direction
+                    ))
+
+            # 4. Set threat_level on existing nodes that have threat 0 by default
+            threat_map = {
+                "The_CPU_Socket": 1,
+                "Black_Market_Port": 0,
+                "The_Arena": 0,
+            }
+            for node_name, threat in threat_map.items():
+                node = (await session.execute(
+                    select(GridNode).where(GridNode.name == node_name)
+                )).scalars().first()
+                if node and node.threat_level != threat:
+                    node.threat_level = threat
+
+            await session.commit()
+            logger.info("Grid expansion seeded successfully.")
+
+    async def resolve_mob_encounter(self, name: str, network: str, threat_level: int) -> dict:
+        """Instant-resolve a mob encounter. Returns result dict with outcome details."""
+        import random
+        mob = self.MOB_ROSTER.get(threat_level, self.MOB_ROSTER[1])
+
+        async with self.async_session() as session:
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                func.lower(Character.name) == name.lower(),
+                func.lower(NetworkAlias.nickname) == name.lower(),
+                NetworkAlias.network_name == network
+            ).options(selectinload(Character.inventory).selectinload(InventoryItem.template))
+            char = (await session.execute(stmt)).scalars().first()
+            if not char:
+                return {"error": "Character not found"}
+
+            # Combat roll
+            player_roll = random.randint(1, 20) + char.alg
+            mob_dc = 10 + threat_level * 2
+            won = player_roll >= mob_dc
+
+            result = {
+                "mob_name":    mob["name"],
+                "threat":      threat_level,
+                "roll":        player_roll,
+                "dc":          mob_dc,
+                "won":         won,
+                "xp_gained":   0,
+                "credits_gained": 0,
+                "credits_lost":   0,
+                "loot":        None,
+                "respawned":   False,
+            }
+
+            if won:
+                char.xp += mob["xp"]
+                char.credits += mob["credits"]
+                result["xp_gained"] = mob["xp"]
+                result["credits_gained"] = mob["credits"]
+
+                # Level up check
+                xp_threshold = char.level * 1000
+                if char.xp >= xp_threshold:
+                    char.xp -= xp_threshold
+                    char.level += 1
+                    char.alg += 1
+                    result["leveled_up"] = True
+
+                # 20% loot drop
+                if random.random() < 0.20:
+                    loot_name = random.choice(self.LOOT_TABLE)
+                    tpl = (await session.execute(
+                        select(ItemTemplate).where(ItemTemplate.name == loot_name)
+                    )).scalars().first()
+                    if tpl:
+                        existing = next(
+                            (i for i in char.inventory if i.template_id == tpl.id), None
+                        )
+                        if existing:
+                            existing.quantity += 1
+                        else:
+                            session.add(InventoryItem(character_id=char.id, template_id=tpl.id))
+                        result["loot"] = loot_name
+
+                # Daily task progress
+                reward_msg = await self.increment_daily_task(session, char, "Kill a Grid Bug")
+                result["task_reward"] = reward_msg
+
+            else:
+                # Lose: -10% credits, eject to nearest safezone
+                penalty = char.credits * 0.10
+                char.credits = max(0.0, char.credits - penalty)
+                result["credits_lost"] = round(penalty, 2)
+
+                uplink = (await session.execute(
+                    select(GridNode).where(GridNode.name == "The_Grid_Uplink")
+                )).scalars().first()
+                if uplink:
+                    char.node_id = uplink.id
+                    result["respawned"] = True
+
+            await session.commit()
+            return result
+
+
     async def grid_repair(self, name, network):
         async with self.async_session() as session:
             stmt = select(Character).join(Player).join(NetworkAlias).where(
@@ -370,6 +577,7 @@ class ArenaDB:
                 'name': node.name,
                 'description': node.description,
                 'type': node.node_type,
+                'node_type': node.node_type,
                 'exits': exits,
                 'credits': char.credits,
                 'level': char.level,
@@ -379,6 +587,7 @@ class ArenaDB:
                 'owner': node.owner.name if node.owner else "Unclaimed",
                 'upgrade_level': node.upgrade_level,
                 'durability': node.durability,
+                'threat_level': node.threat_level,
             }
 
     async def move_fighter(self, name, network, direction):
@@ -404,6 +613,26 @@ class ArenaDB:
                     await session.commit()
                     return conn.target_node.name, f"Traversed {direction} to {conn.target_node.name}."
             return None, f"No valid route found for '{direction}'."
+
+    async def move_fighter_to_node(self, name: str, network: str, node_name: str) -> bool:
+        """Teleport a character directly to a node by name. Used for flee/eject mechanics."""
+        async with self.async_session() as session:
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                func.lower(Character.name) == name.lower(),
+                func.lower(NetworkAlias.nickname) == name.lower(),
+                NetworkAlias.network_name == network
+            )
+            char = (await session.execute(stmt)).scalars().first()
+            if not char:
+                return False
+            node = (await session.execute(
+                select(GridNode).where(GridNode.name == node_name)
+            )).scalars().first()
+            if not node:
+                return False
+            char.node_id = node.id
+            await session.commit()
+            return True
 
     async def list_shop_items(self):
         from models import ItemTemplate

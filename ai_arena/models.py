@@ -22,6 +22,7 @@ class GridNode(Base):
     power_consumed = Column(Float, default=0.0)
     power_generated = Column(Float, default=0.0)
     durability = Column(Float, default=100.0)
+    threat_level = Column(Integer, default=0)  # 0=safe, 1-3=wilderness mob tier
     
     # Relationships
     owner = relationship("Character", foreign_keys=[owner_character_id])

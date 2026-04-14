@@ -111,12 +111,16 @@ Arena PvP (at The_Arena node only):
 Daily & Meta:
   {PREFIX} tasks         - view your daily task board
   {PREFIX} inv           - view your inventory
+Mob Encounters (respond within 15 seconds when you see [MOB]):
+  {PREFIX} engage        - fight the mob (roll combat, gain XP/credits if you win)
+  {PREFIX} flee          - retreat to previous node (no penalty, no reward)
 
 ## RULES
 - Reply with ONE command ONLY. No prose, no explanation, no quotes.
 - Grid PvP has a 30-second cooldown. Do not spam attacks.
 - Arena combat only when TURN appears in the current state.
-- If low on credits, idle in a claimed node or complete daily tasks."""
+- If low on credits, idle in a claimed node or complete daily tasks.
+- When you see [MOB], respond IMMEDIATELY with 'x engage' or 'x flee'. Default to engage for low-threat mobs."""
 
     user_prompt = f"""## CURRENT SITUATION
 Location: {location} | HP: {hp} | Credits: {credits:.0f}c | Inventory: {inventory}
@@ -297,7 +301,7 @@ class AutomataBot:
                             await self.send(f"PRIVMSG {CHANNEL} :{msg}")
                     elif source_nick == MANAGER:
                         self.record_memory(msg)
-                        if ("TURN" in msg and "Awaiting public commands" in msg) or "[GRID]" in msg or "[ARENA CALL]" in msg or "[GRID PvP]" in msg:
+                        if ("TURN" in msg and "Awaiting public commands" in msg) or "[GRID]" in msg or "[ARENA CALL]" in msg or "[GRID PvP]" in msg or "[MOB]" in msg:
                             asyncio.create_task(self.process_turn(msg))
                     continue
 

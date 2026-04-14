@@ -63,6 +63,8 @@ class GridNode:
         if isinstance(raw_admins, str):
             raw_admins = [x.strip() for x in raw_admins.split(',')]
         self.admins = [a.lower() for a in raw_admins]
+        self.pending_encounters = {}  # nick -> {mob, threat, prev_node, timer_task}
+
 
     async def send(self, message: str):
         logger.debug(f"[{self.net_name}] > {message}")
@@ -82,7 +84,9 @@ class GridNode:
         self.arena_call_task = asyncio.create_task(self.arena_call_loop())
         self.idle_payout_task = asyncio.create_task(self.idle_payout_loop())
         self.power_tick_task = asyncio.create_task(self.power_tick_loop())
+        await self.db.seed_grid_expansion()
         await self.listen_loop()
+
 
     async def set_dynamic_topic(self):
         fighters = await self.db.list_fighters(self.net_name)
@@ -316,13 +320,111 @@ class GridNode:
         await self.check_match_start()
 
     async def handle_grid_movement(self, nick: str, direction: str, reply_target: str):
+        prev_node = None
+        loc = await self.db.get_location(nick, self.net_name)
+        if loc:
+            prev_node = loc['name']
+
         node_name, msg = await self.db.move_fighter(nick, self.net_name, direction)
         if node_name:
             await self.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'[GRID] {msg}', C_GREEN))}")
             asyncio.create_task(self.handle_grid_view(nick, reply_target))
+            # Check for mob spawn on wilderness entry
+            new_loc = await self.db.get_location(nick, self.net_name)
+            if new_loc and new_loc.get('node_type') == 'wilderness':
+                threat = new_loc.get('threat_level', 0)
+                if threat > 0:
+                    import random
+                    spawn_chance = 0.60 if threat >= 3 else 0.35
+                    if random.random() < spawn_chance:
+                        asyncio.create_task(
+                            self.handle_mob_encounter(nick, node_name, threat, prev_node, reply_target)
+                        )
         else:
             await self.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'[ERR] {msg}', C_RED))}")
             asyncio.create_task(self.handle_grid_view(nick, reply_target))
+
+    async def handle_mob_encounter(self, nick: str, node_name: str, threat: int, prev_node: str, reply_target: str):
+        """Send a [MOB] warning and give the player 15s to engage or flee."""
+        from arena_db import ArenaDB
+        mob = self.db.MOB_ROSTER.get(threat, self.db.MOB_ROSTER[1])
+        mob_name = mob['name']
+
+        machine = await self.is_machine_mode(nick)
+        if machine:
+            warn = f"[MOB] THREAT:{threat} NAME:{mob_name} NODE:{node_name} ENGAGE:x engage FLEE:x flee TIMEOUT:15"
+            await self.send(f"PRIVMSG {nick} :{warn}")
+        else:
+            warn = format_text(
+                f"⚠️ [MOB DETECTED] {mob_name} (Threat {threat}) lurks in {node_name}! "
+                f"Type '{self.prefix} engage' to fight or '{self.prefix} flee' to retreat. (15s)",
+                C_YELLOW, bold=True
+            )
+            await self.send(f"PRIVMSG {reply_target} :{build_banner(warn)}")
+
+        sigact = format_text(f"[SIGACT] {mob_name} detected near {nick} at {node_name}.", C_RED)
+        await self.send(f"PRIVMSG {self.config['channel']} :{build_banner(sigact)}")
+
+        async def auto_engage():
+            try:
+                await asyncio.sleep(15)
+                if nick in self.pending_encounters:
+                    logger.info(f"[MOB] Auto-engaging for {nick} (timeout)")
+                    asyncio.create_task(self._resolve_mob(nick, reply_target))
+            except asyncio.CancelledError:
+                pass
+
+        timer = asyncio.create_task(auto_engage())
+        self.pending_encounters[nick] = {
+            'mob_name':  mob_name,
+            'threat':    threat,
+            'prev_node': prev_node,
+            'timer':     timer,
+            'reply_target': reply_target,
+        }
+
+    async def _resolve_mob(self, nick: str, reply_target: str):
+        """Execute and announce the result of a mob encounter."""
+        enc = self.pending_encounters.pop(nick, None)
+        if not enc:
+            return
+        enc['timer'].cancel()
+
+        result = await self.db.resolve_mob_encounter(nick, self.net_name, enc['threat'])
+        if 'error' in result:
+            await self.send(f"PRIVMSG {reply_target} :[ERR] {result['error']}")
+            return
+
+        machine = await self.is_machine_mode(nick)
+        if result['won']:
+            if machine:
+                parts = f"[MOB] RESULT:WIN XP:{result['xp_gained']} CRED:+{result['credits_gained']}"
+                if result.get('loot'): parts += f" LOOT:{result['loot']}"
+                if result.get('leveled_up'): parts += " LEVELUP:true"
+                await self.send(f"PRIVMSG {nick} :{parts}")
+            else:
+                loot_str = f" Dropped: {result['loot']}!" if result.get('loot') else ""
+                lvl_str  = f" 🆙 Level Up!" if result.get('leveled_up') else ""
+                msg = format_text(
+                    f"✅ {enc['mob_name']} neutralized! +{result['xp_gained']} XP, +{result['credits_gained']}c.{loot_str}{lvl_str}",
+                    C_GREEN
+                )
+                await self.send(f"PRIVMSG {reply_target} :{build_banner(msg)}")
+            sigact = format_text(f"[SIGACT] {nick} eliminated {enc['mob_name']}! +{result['xp_gained']} XP.", C_YELLOW)
+            await self.send(f"PRIVMSG {self.config['channel']} :{build_banner(sigact)}")
+            if result.get('task_reward'):
+                await self.send(f"PRIVMSG {reply_target} :{build_banner(format_text(result['task_reward'], C_CYAN))}")
+        else:
+            if machine:
+                await self.send(f"PRIVMSG {nick} :[MOB] RESULT:LOSS CRED:-{result['credits_lost']} EJECTED:The_Grid_Uplink")
+            else:
+                msg = format_text(
+                    f"💀 {enc['mob_name']} overwhelmed you! Lost {result['credits_lost']:.2f}c. "
+                    f"Ejected to The_Grid_Uplink.",
+                    C_RED
+                )
+                await self.send(f"PRIVMSG {reply_target} :{build_banner(msg)}")
+
 
     async def handle_registration(self, nick: str, args: list, reply_target: str):
         try:
@@ -924,6 +1026,31 @@ class GridNode:
 
                         elif verb == "options":
                             asyncio.create_task(self.handle_options(source_nick, args, reply_target))
+                            continue
+
+                        elif verb == "engage":
+                            if source_nick in self.pending_encounters:
+                                asyncio.create_task(self._resolve_mob(source_nick, reply_target))
+                            else:
+                                await self.send(f"PRIVMSG {reply_target} :[MOB] No active encounter to engage.")
+                            continue
+
+                        elif verb == "flee":
+                            enc = self.pending_encounters.pop(source_nick, None)
+                            if enc:
+                                enc['timer'].cancel()
+                                prev = enc.get('prev_node')
+                                if prev:
+                                    # Move back to previous node
+                                    await self.db.move_fighter_to_node(source_nick, self.net_name, prev)
+                                machine = await self.is_machine_mode(source_nick)
+                                if machine:
+                                    await self.send(f"PRIVMSG {source_nick} :[MOB] RESULT:FLED NODE:{prev or 'unknown'}")
+                                else:
+                                    msg = format_text(f"🏃 You fled from {enc['mob_name']} back to {prev or 'safety'}.", C_CYAN)
+                                    await self.send(f"PRIVMSG {reply_target} :{build_banner(msg)}")
+                            else:
+                                await self.send(f"PRIVMSG {reply_target} :[MOB] No active encounter to flee from.")
                             continue
 
                         elif verb == "version":

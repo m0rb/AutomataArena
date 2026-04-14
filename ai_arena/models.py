@@ -15,7 +15,7 @@ class GridNode(Base):
     description = Column(String)
     node_type = Column(String, default="wilderness")  # wilderness, arena, merchant, safezone
     owner_alliance_id = Column(Integer, nullable=True) # For Territory Control
-    owner_character_id = Column(Integer, ForeignKey('characters.id'), nullable=True)
+    owner_character_id = Column(Integer, ForeignKey('characters.id', use_alter=True, name="fk_grid_owner"), nullable=True)
     upgrade_level = Column(Integer, default=1)
     
     power_stored = Column(Float, default=0.0)

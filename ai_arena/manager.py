@@ -591,6 +591,7 @@ class GridNode:
             await self.send(f"PRIVMSG {reply_target} :🏆 " + format_text("All Tasks Completed! Bonus Paid.", C_YELLOW))
 
     async def handle_options(self, nickname: str, args: list, reply_target: str):
+        logger.info(f"[OPTIONS] nick={nickname!r} args={args!r} reply_target={reply_target!r}")
         VALID_KEYS = {
             "output":    ("output_mode",    {"human": "human", "machine": "machine"}),
             "tutorial":  ("tutorial_mode",  {"on": True, "off": False}),
@@ -624,6 +625,7 @@ class GridNode:
             return
 
         if len(args) < 2:
+            logger.warning(f"[OPTIONS] Syntax error triggered: nick={nickname!r} args={args!r}")
             await self.send(f"PRIVMSG {reply_target} :[ERR] Syntax: {self.prefix} options <setting> <value>")
             return
 
@@ -911,7 +913,7 @@ class GridNode:
                             continue
 
                         elif verb == "options":
-                            asyncio.create_task(self.handle_options(source_nick, args[1:], reply_target))
+                            asyncio.create_task(self.handle_options(source_nick, args, reply_target))
                             continue
 
                         elif verb == "version":

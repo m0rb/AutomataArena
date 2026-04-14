@@ -375,6 +375,7 @@ class ArenaDB:
                 'power_generated': node.power_generated,
                 'owner': node.owner.name if node.owner else "Unclaimed",
                 'upgrade_level': node.upgrade_level,
+                'durability': node.durability,
             }
 
     async def move_fighter(self, name, network, direction):

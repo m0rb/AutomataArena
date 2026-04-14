@@ -97,7 +97,7 @@ class Character(Base):
     
     # Relationships
     player = relationship("Player", back_populates="characters")
-    current_node = relationship("GridNode", back_populates="characters_present")
+    current_node = relationship("GridNode", foreign_keys=[node_id], back_populates="characters_present")
     inventory = relationship("InventoryItem", back_populates="owner", cascade="all, delete-orphan")
 
 # ==========================================

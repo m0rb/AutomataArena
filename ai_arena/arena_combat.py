@@ -48,7 +48,7 @@ class Entity:
             self.inventory = json.loads(db_record.get('inventory', '[]'))
         except:
             self.inventory = []
-        self.max_hp = self.ram * 10
+        self.max_hp = self.ram * 5
         self.hp = self.max_hp
         self.alignment = db_record.get('alignment', 0)
         self.zone = "The_CPU_Socket" 

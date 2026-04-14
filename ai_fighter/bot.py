@@ -72,11 +72,12 @@ def call_llm(arena_state, char_data, memory_buffer):
     memory_text = "\n".join(memory_buffer) if memory_buffer else "No prior memory."
 
     system_prompt = (
-        f"You are playing an IRC MUD. You are {NICK}. Your bio: {bio}. "
+        f"You are playing an IRC MMO. You are {NICK}. Your bio: {bio}."
         f"Your inventory: [{inventory}]. "
-        f"Based on your gear, recent event history, and the current room state, reply ONLY with exactly one command starting with '{PREFIX} '. "
-        f"Examples: '{PREFIX} move north', '{PREFIX} attack target', '{PREFIX} shoot target', '{PREFIX} evade'. "
-        f"If you see an ARENA CALL or desire to fight, your goal is to 'move' to The_Arena node and then use 'queue'."
+        f"Based on recent events and your environment, reply ONLY with exactly ONE command starting with '{PREFIX} '.\n"
+        f"Navigation: '{PREFIX} move north', '{PREFIX} grid'\n"
+        f"Grid PvP Rules: You may use '{PREFIX} attack <name>', '{PREFIX} hack <name>', or '{PREFIX} rob <name>' if threatened or if grid logic demands.\n"
+        f"Arena PvP Rules: If you migrate to The_Arena, use '{PREFIX} queue'\n"
     )
 
     user_prompt = f"### RECENT EVENTS:\n{memory_text}\n\n### CURRENT STATE:\n{arena_state}\n\nWhat is your next action?"
@@ -109,6 +110,8 @@ class AutomataBot:
         self.reader = None
         self.char_data = load_character()
         self.memory_buffer = []
+        self.last_action_time = 0
+        self.processing = False
 
     def record_memory(self, msg):
         if "Awaiting public commands" in msg:
@@ -135,8 +138,18 @@ class AutomataBot:
         await self.listen_loop()
 
     async def process_turn(self, arena_state):
+        if self.processing: return
+        self.processing = True
+        
+        import time
+        now = time.time()
+        if now - self.last_action_time < 30 and "TURN" not in arena_state:
+            self.processing = False
+            return
+
         if not self.char_data: 
             logger.warning("process_turn called but no char_data loaded — skipping.")
+            self.processing = False
             return
         logger.info("Analyzing arena state and querying LLM for next move...")
         
@@ -151,6 +164,8 @@ class AutomataBot:
             logger.warning(f"LLM response did not start with '{PREFIX}', defaulting to '{PREFIX} grid'.")
             action = f"{PREFIX} grid"
         await self.send(f"PRIVMSG {CHANNEL} :{action}")
+        self.last_action_time = time.time()
+        self.processing = False
 
     async def listen_loop(self):
         while True:
@@ -250,7 +265,7 @@ class AutomataBot:
                             await asyncio.sleep(2)
                             await self.send(f"PRIVMSG {CHANNEL} :{PREFIX} grid")
 
-                        if ("TURN" in msg and "Awaiting public commands" in msg) or "[GRID]" in msg or "[ARENA CALL]" in msg:
+                        if ("TURN" in msg and "Awaiting public commands" in msg) or "[GRID]" in msg or "[ARENA CALL]" in msg or "[GRID PvP]" in msg:
                             asyncio.create_task(self.process_turn(msg))
 
 if __name__ == "__main__":

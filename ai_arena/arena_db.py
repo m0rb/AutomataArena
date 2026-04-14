@@ -119,6 +119,7 @@ class ArenaDB:
                 bnd=stats.get('bnd', 5),
                 sec=stats.get('sec', 5),
                 alg=stats.get('alg', 5),
+                current_hp=stats.get('ram', 5) * 5,
                 auth_token=auth_token
             )
             session.add(character)
@@ -165,7 +166,9 @@ class ArenaDB:
                     'elo': char.elo,
                     'wins': char.wins,
                     'losses': char.losses,
-                    'credits': char.credits
+                    'credits': char.credits,
+                    'current_hp': char.current_hp,
+                    'max_hp': char.ram * 5
                 }
             return None
 
@@ -480,6 +483,119 @@ class ArenaDB:
                     node.power_generated += generated
                     node.power_stored = min(max_power, node.power_stored + generated)
             await session.commit()
+
+    async def grid_attack(self, attacker_name, target_name, network):
+        import random
+        async with self.async_session() as session:
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                Character.name.in_([attacker_name, target_name]),
+                NetworkAlias.network_name == network
+            ).options(
+                selectinload(Character.current_node),
+                selectinload(Character.inventory)
+            )
+            result = (await session.execute(stmt)).scalars().all()
+            
+            attacker, target = None, None
+            for c in result:
+                if c.name.lower() == attacker_name.lower(): attacker = c
+                if c.name.lower() == target_name.lower(): target = c
+                
+            if not attacker or not target: return False, "Target not found on this network."
+            if attacker.node_id != target.node_id: return False, "You must be in the same Network Node as your target."
+            if not target.current_node or target.current_node.node_type == "safezone": return False, "Combat is strictly prohibited in this zone."
+            if attacker.id == target.id: return False, "Self-termination is illogical."
+            
+            # Simple 1-hit resolution
+            evade_roll = random.randint(1, 100)
+            if evade_roll <= (target.bnd * 2):
+                return True, f"{attacker.name} swung wildly at {target.name}, but they evaded!"
+                
+            raw_dmg = attacker.cpu * 3
+            final_dmg = max(1, raw_dmg - target.sec)
+            if random.randint(1, 100) <= attacker.alg: final_dmg *= 2 # Crit
+            
+            target.current_hp -= final_dmg
+            if target.current_hp <= 0:
+                looted = target.credits * 0.10
+                target.credits -= looted
+                attacker.credits += looted
+                
+                # Move to safezone
+                uplink = (await session.execute(select(GridNode).where(GridNode.name == "The_Grid_Uplink"))).scalars().first()
+                if uplink: target.node_id = uplink.id
+                target.current_hp = target.ram * 5 # Reset HP
+                
+                await session.commit()
+                return True, f"{attacker.name} struck {target.name} for {final_dmg} DMG! {target.name} flatlines... {attacker.name} loots {looted:.2f}c."
+                
+            await session.commit()
+            return True, f"{attacker.name} struck {target.name} for {final_dmg} DMG! ({target.current_hp}/{target.ram*5} HP)"
+
+    async def grid_hack(self, attacker_name, target_name, network):
+        import random
+        async with self.async_session() as session:
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                Character.name.in_([attacker_name, target_name]),
+                NetworkAlias.network_name == network
+            ).options(selectinload(Character.current_node))
+            result = (await session.execute(stmt)).scalars().all()
+            
+            attacker, target = None, None
+            for c in result:
+                if c.name.lower() == attacker_name.lower(): attacker = c
+                if c.name.lower() == target_name.lower(): target = c
+                
+            if not attacker or not target: return False, "Target not found."
+            if attacker.node_id != target.node_id: return False, "Target is not in your current sector."
+            if target.current_node and target.current_node.node_type == "safezone": return False, "ICE prevents hacking in safezones."
+            if attacker.id == target.id: return False, "..."
+            
+            roll = random.randint(1, 20) + attacker.alg
+            dc = 10 + target.sec
+            if roll >= dc:
+                looted = target.credits * 0.05
+                target.credits -= looted
+                attacker.credits += looted
+                await session.commit()
+                return True, f"Hack Successful! {attacker.name} breached {target.name}'s firewall and siphoned {looted:.2f}c."
+            else:
+                attacker.credits = max(0.0, attacker.credits - 50.0)
+                await session.commit()
+                return False, f"Hack Failed. {target.name}'s ICE traced the intrusion. {attacker.name} is fined 50c!"
+
+    async def grid_rob(self, attacker_name, target_name, network):
+        import random
+        async with self.async_session() as session:
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                Character.name.in_([attacker_name, target_name]),
+                NetworkAlias.network_name == network
+            ).options(
+                selectinload(Character.current_node),
+                selectinload(Character.inventory)
+            )
+            result = (await session.execute(stmt)).scalars().all()
+            
+            attacker, target = None, None
+            for c in result:
+                if c.name.lower() == attacker_name.lower(): attacker = c
+                if c.name.lower() == target_name.lower(): target = c
+                
+            if not attacker or not target: return False, "Target not found."
+            if attacker.node_id != target.node_id: return False, "Target is not in your locale."
+            if target.current_node and target.current_node.node_type == "safezone": return False, "No physical theft allowed here."
+            if attacker.id == target.id: return False, "..."
+            if not target.inventory: return False, f"{target.name}'s pockets are empty."
+            
+            roll = random.randint(1, 20) + attacker.bnd
+            dc = 10 + target.bnd
+            if roll >= dc:
+                item_to_steal = random.choice(target.inventory)
+                item_to_steal.character_id = attacker.id
+                await session.commit()
+                return True, f"Sleight of hand successful! {attacker.name} lifted an item."
+            else:
+                return False, f"{attacker.name} clumsily attempted to rob {target.name} and was caught!"
 
 async def async_main():
     parser = argparse.ArgumentParser(description="AutomataArena Async SQLAlchemy DB Manager")

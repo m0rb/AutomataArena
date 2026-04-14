@@ -55,6 +55,7 @@ class GridNode:
         self.registered_bots = 0
         self.pending_pings = {}
         self.channel_users = {}
+        self.action_timestamps = {}
         
         raw_admins = CONFIG.get('admins', [])
         if isinstance(raw_admins, str):
@@ -426,6 +427,49 @@ class GridNode:
             lines = [header, stats, attrs, wl]
             for l in lines: await self.send(f"PRIVMSG {reply_target} :{build_banner(l)}")
 
+    async def check_rate_limit(self, nick: str, reply_target: str, cooldown: int = 30) -> bool:
+        import time
+        now = time.time()
+        
+        if nick not in self.action_timestamps:
+            self.action_timestamps[nick] = {'last_action': now, 'warnings': 0}
+            return True
+            
+        record = self.action_timestamps[nick]
+        elapsed = now - record['last_action']
+        
+        if elapsed < cooldown:
+            record['warnings'] += 1
+            if record['warnings'] > 3:
+                return False # Silent Ignore
+            else:
+                msg = format_text(f"[SYSTEM] Anti-flood ICE triggered. Please wait {cooldown - int(elapsed)}s.", C_RED)
+                await self.send(f"PRIVMSG {reply_target} :{build_banner(msg)}")
+                return False
+                
+        record['last_action'] = now
+        record['warnings'] = 0
+        return True
+
+    async def handle_pvp_command(self, nickname: str, reply_target: str, action: str, target_name: str):
+        if not await self.check_rate_limit(nickname, reply_target, cooldown=30):
+            return
+            
+        success, msg = False, ""
+        if action == "attack":
+            success, msg = await self.db.grid_attack(nickname, target_name, self.net_name)
+        elif action == "hack":
+            success, msg = await self.db.grid_hack(nickname, target_name, self.net_name)
+        elif action == "rob":
+            success, msg = await self.db.grid_rob(nickname, target_name, self.net_name)
+            
+        if success:
+            banner = format_text(f"[GRID PvP] {msg}", C_YELLOW)
+            await self.send(f"PRIVMSG {self.config['channel']} :{build_banner(banner)}")
+        else:
+            banner = format_text(msg, C_RED)
+            await self.send(f"PRIVMSG {reply_target} :{build_banner(banner)}")
+
     async def handle_grid_command(self, nickname: str, reply_target: str, action: str):
         if action == "claim":
             success, msg = await self.db.claim_node(nickname, self.net_name)
@@ -665,6 +709,10 @@ class GridNode:
 
                         elif verb == "info":
                             asyncio.create_task(self.handle_info_view(source_nick, args, reply_target))
+                            continue
+
+                        elif verb in ["attack", "hack", "rob"] and len(args) > 0 and args[0].lower() != "grid":
+                            asyncio.create_task(self.handle_pvp_command(source_nick, reply_target, verb, args[0]))
                             continue
 
                         elif verb == "claim":

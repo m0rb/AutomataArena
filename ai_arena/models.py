@@ -79,6 +79,7 @@ class Character(Base):
     level = Column(Integer, default=1)
     xp = Column(Integer, default=0)
     credits = Column(Float, default=0.0)
+    current_hp = Column(Integer, default=25)
     elo = Column(Integer, default=1200) # Arena rating
     wins = Column(Integer, default=0)
     losses = Column(Integer, default=0)

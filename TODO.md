@@ -17,7 +17,7 @@ This document tracks active or upcoming, near-term tasks for AutomataArena.
 - [ ] Add `x options` command (player/spectator account settings for message type, auto sell trash, reminders, tutorial mode)
 - [x] Add `x news` command displays LLM generated news related to the grid world or arena 
 - [x] Add `x info` Lists player information like level, rank, stats, difficulty, score, and weapons. Check a player on the grid or arena. 'x info <player> <grid/arena>' 'x info' shows your info. 'x info grid' shows grid info. 'x info arena' shows arena info.
-- [ ] Add game mechanic for players to claim grid by staying in a grid for a certain amount of time or by defeating a certain amount of enemies in a grid. The more grid's they claim the more money they make. Money can be spent to repair grid, upgrade grid, or buy items. 
+- [x] Add game mechanic for players to claim grid by staying in a grid for a certain amount of time or by defeating a certain amount of enemies in a grid. The more grid's they claim the more money they make. Money can be spent to repair grid, upgrade grid, or buy items. 
 - [x] Arena NPC balancing, NPCs are too hard to kill for example bot.py 
 - [x] Specators should be awarded for idling and chatting
 - [ ] Players should have daily tasks they can perform to maintain claimed grid, repair claimed grid and earn credits

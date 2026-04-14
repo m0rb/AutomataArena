@@ -99,9 +99,23 @@ class ArenaDB:
                 
             stmt_char = select(Character).where(Character.name == name, Character.player_id == player.id)
             result = await session.execute(stmt_char)
-            if result.scalars().first():
-                logger.warning(f"Registration failed: Fighter '{name}' already exists.")
-                return None
+            existing = result.scalars().first()
+            if existing:
+                if existing.race == "Spectator" and race != "Spectator":
+                    existing.race = race
+                    existing.char_class = bot_class
+                    existing.bio = bio
+                    existing.cpu = stats.get('cpu', 5)
+                    existing.ram = stats.get('ram', 5)
+                    existing.bnd = stats.get('bnd', 5)
+                    existing.sec = stats.get('sec', 5)
+                    existing.alg = stats.get('alg', 5)
+                    existing.current_hp = stats.get('ram', 5) * 5
+                    await session.commit()
+                    return existing.auth_token
+                else:
+                    logger.warning(f"Registration failed: Fighter '{name}' already exists.")
+                    return None
             
             stmt_node = select(GridNode).where(GridNode.name == "The_Grid_Uplink")
             result = await session.execute(stmt_node)

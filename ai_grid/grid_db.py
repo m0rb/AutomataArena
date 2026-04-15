@@ -108,6 +108,7 @@ class ArenaDB:
     async def get_fighter(self, name, network): return await self.player.get_fighter(name, network)
     async def authenticate_fighter(self, name, network, provided_token): return await self.player.authenticate_fighter(name, network, provided_token)
     async def list_fighters(self, network=None): return await self.player.list_fighters(network)
+    async def get_character_by_nick(self, nick: str, network: str, session): return await self.player.get_character_by_nick(nick, network, session)
     async def tick_player_maintenance(self, network, idlers): return await self.player.tick_player_maintenance(network, idlers)
     async def active_powergen(self, name, network): return await self.player.active_powergen(name, network)
     async def active_training(self, name, network): return await self.player.active_training(name, network)

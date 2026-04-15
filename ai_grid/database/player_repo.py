@@ -230,6 +230,15 @@ class PlayerRepository:
                 })
             return fighters
 
+    async def get_character_by_nick(self, nick: str, network: str, session) -> Character:
+        """Retrieve a full Character model within a given session."""
+        stmt = select(Character).join(Player).join(NetworkAlias).where(
+            Character.name == nick,
+            NetworkAlias.nickname == nick,
+            NetworkAlias.network_name == network
+        ).options(selectinload(Character.current_node))
+        return (await session.execute(stmt)).scalars().first()
+
     async def active_powergen(self, name: str, network: str) -> tuple:
         async with self.async_session() as session:
             stmt = select(Character).join(Player).join(NetworkAlias).where(

@@ -190,7 +190,9 @@ class PlayerRepository:
                     'losses': char.losses,
                     'credits': char.credits,
                     'current_hp': char.current_hp,
-                    'max_hp': char.ram * 5
+                    'max_hp': char.ram * 5,
+                    'data_units': char.data_units,
+                    'syndicate_id': char.syndicate_id
                 }
             return None
 

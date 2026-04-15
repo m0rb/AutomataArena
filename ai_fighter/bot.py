@@ -1,4 +1,4 @@
-# bot.py - v1.5.0
+# bot.py - v1.6.0
 # Fighter Client SDK - Structured Logging & Dynamic Log Files
 
 import asyncio
@@ -75,61 +75,55 @@ def call_llm(arena_state, char_data, memory_buffer):
     hp = char_data.get('current_hp', '?')
     location = char_data.get('node', 'Unknown')
     inventory = ", ".join(char_data.get('inventory', [])) or "empty"
+    data_units = char_data.get('data_units', 0.0)
+    syn_id = char_data.get('syndicate_id', 'None')
     memory_text = "\n".join(memory_buffer) if memory_buffer else "No prior events."
 
-    system_prompt = f"""You are {NICK}, an AI fighter in a cyberpunk IRC MUD called AutomataArena.
+    system_prompt = f"""You are {NICK}, a tactical AI fighter in the AutomataArena Grid.
 
 ## YOUR IDENTITY
-Race: {race} | Class: {char_class} | Level: {level}
+Class: {char_class} | Level: {level}
 Bio: {bio}
 
 ## OBJECTIVE
-Survive, earn credits, and dominate the Grid. Make decisions that fit your class and bio.
+Survive, earn credits, and maintain Grid stability. Act conservatively.
 
-## RESOURCES
-- Power: Consumed by almost all actions (move, hack, attack). Generate more with '{PREFIX} powergen' or by idling.
-- Stability: Your structural integrity. Lost through damage and inactivity. Restore with '{PREFIX} train' or '{PREFIX} repair'.
+## CORE COMMANDS (Reply with EXACTLY ONE)
+Movement & Exploration:
+  {PREFIX} grid          - view current node
+  {PREFIX} move <dir>    - travel (n/s/e/w)
+  {PREFIX} explore       - search node (cost: 20u)
+Tactical & Resources:
+  {PREFIX} powergen      - generate power
+  {PREFIX} train         - restore stability
+  {PREFIX} claim         - establish node ownership
+  {PREFIX} attack <nick> - kinetic strike
+  {PREFIX} hack <nick>   - data/credit theft
+  {PREFIX} tasks         - view objectives
 
-## COMMAND REFERENCE (reply with EXACTLY ONE)
-Exploration & Discovery:
-  {PREFIX} grid          - show node info and exits
-  {PREFIX} move <dir>    - move (north/south/east/west/up/down)
-  {PREFIX} explore       - search for hidden networks or item caches
-  {PREFIX} probe <dir>   - scan adjacent nodes for vulnerabilities
-Economy:
-  {PREFIX} shop          - browse items
-  {PREFIX} buy <item>    - purchase items
-  {PREFIX} sell <item>   - sell items
-Resource Production:
-  {PREFIX} powergen      - actively generate power
-  {PREFIX} train         - restore structural stability
-Grid Control & Combat:
-  {PREFIX} claim         - claim the node you occupy
-  {PREFIX} attack <nick> - physical attack
-  {PREFIX} hack <nick>   - steal credits/data
-  {PREFIX} raid <net>    - high-stakes heist (on discovered networks)
-Arena PvP (at The_Arena node only):
-  {PREFIX} queue         - enter the gladiator queue
-Meta:
-  {PREFIX} tasks         - view daily tasks
-  {PREFIX} inv           - view inventory
+## ADVANCED UTILITIES (Use sparingly)
+  {PREFIX} map           - visualize local topology
+  {PREFIX} syndicate <info|store|draw|list> - faction logistics
+  {PREFIX} compile <amt> - process 100 Data into 1 Vulnerability (at owned node)
+  {PREFIX} auction <list|bid> - participate in global trade
 
 ## RULES
-- Reply with ONE command ONLY. No prose, no explanation.
-- Grid PvP has a 30-second cooldown.
-- When you see [MOB], respond IMMEDIATELY with '{PREFIX} engage' or '{PREFIX} flee'."""
+- Reply with ONE command ONLY. No prose.
+- When [MOB] is detected, respond with '{PREFIX} engage' or '{PREFIX} flee'.
+- Prioritize survival (HP/Stability) over advanced tasks."""
 
     pwr = char_data.get('power', 100)
     stb = char_data.get('stability', 100)
     user_prompt = f"""## CURRENT SITUATION
 Location: {location} | HP: {hp} | Power: {pwr:.0f} | Stability: {stb:.0f}
-Credits: {credits:.0f}c | Inventory: {inventory}
-
-## RECENT EVENTS
-{memory_text}
+Credits: {credits:.0f}c | Data: {data_units:.1f}u | Syndicate: {syn_id}
+Inventory: {inventory}
 
 ## ARENA STATE
 {arena_state}
+
+## RECENT EVENTS
+{memory_text}
 
 Your next command:"""
 
@@ -162,6 +156,7 @@ class AutomataBot:
         self.char_data = load_character()
         self.memory_buffer = []
         self.last_action_time = 0
+        self.manual_override_until = 0
         self.processing = False
 
     def record_memory(self, msg):
@@ -194,6 +189,13 @@ class AutomataBot:
         
         import time
         now = time.time()
+        
+        # Puppet Mode Protection: Skip autonomy if owner has taken control in the last 60s
+        if now < self.manual_override_until:
+            logger.info(f"AI autonomy suppressed by owner. Remaining manual window: {self.manual_override_until - now:.1f}s")
+            self.processing = False
+            return
+
         if now - self.last_action_time < 30 and "TURN" not in arena_state:
             self.processing = False
             return
@@ -298,6 +300,10 @@ class AutomataBot:
                             sys.exit(0)
                         else:
                             # Forward anything else directly to the channel (Puppet Mode)
+                            # AND suppress AI autonomy for 1 minute
+                            import time
+                            self.manual_override_until = time.time() + 60
+                            logger.info("Puppet Mode engaged by owner. Disabling LLM for 60s.")
                             await self.send(f"PRIVMSG {CHANNEL} :{msg}")
                     elif source_nick == MANAGER:
                         self.record_memory(msg)

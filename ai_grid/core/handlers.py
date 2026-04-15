@@ -58,7 +58,8 @@ async def handle_help(node, nick: str, args: list, reply_target: str):
             info = registry[verb]
             await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'[ COMMAND: {verb.upper()} ]', C_CYAN, True))}")
             await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('DESCRIPTION: ', C_YELLOW) + format_text(info['desc'], C_WHITE))}")
-            await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('SYNTAX: ', C_YELLOW) + format_text(f'{node.prefix} {info['syntax']}', C_GREEN))}")
+            syntax_str = f"{node.prefix} {info['syntax']}"
+            await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('SYNTAX: ', C_YELLOW) + format_text(syntax_str, C_GREEN))}")
             if 'cost' in info:
                 await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('COST: ', C_YELLOW) + format_text(info['cost'], C_RED))}")
             return
@@ -331,6 +332,12 @@ async def handle_auction(node, nick: str, args: list, reply_target: str):
             await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[DARKNET] The auction house is currently empty.', C_CYAN))}")
             return
         
+        machine = await is_machine_mode(node, nick)
+        if machine:
+            parts = " ".join(f"ID:{l['id']}|ITEM:{l['item']}|BID:{l['current_bid']}|END:{l['ends_in_min']}m" for l in listings)
+            await node.send(f"PRIVMSG {nick} :[AUCTION] LIST:{parts}")
+            return
+
         await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ GLOBAL DARKNET AUCTIONS ]', C_CYAN, True))}")
         for l in listings:
             line = f"#{l['id']} | {l['item']} | Seller: {l['seller']} | Bid: {l['current_bid']}c | {l['high_bidder']} | Ends: {l['ends_in_min']}m"
@@ -408,6 +415,12 @@ async def handle_market_view(node, nickname: str, reply_target: str):
     if not status:
         await node.send(f"PRIVMSG {reply_target} :[MARKET] Market is currently stable (1.0x baseline).")
         return
+    
+    machine = await is_machine_mode(node, nickname)
+    if machine:
+        parts = " ".join(f"{k}:{v:.2f}" for k, v in status.items())
+        await node.send(f"PRIVMSG {nickname} :[MARKET] MULTS:{parts}")
+        return
         
     await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ GLOBAL MARKET CONDITIONS ]', C_CYAN, True))}")
     for itype, mult in status.items():
@@ -423,6 +436,12 @@ async def handle_leaderboard(node, nick: str, args: list, reply_target: str):
         await node.send(f"PRIVMSG {reply_target} :[GRID] No records found for category: {cat}")
         return
     
+    machine = await is_machine_mode(node, nick)
+    if machine:
+        parts = " ".join(f"{r['name']}:{r['score']:.1f}" for r in results)
+        await node.send(f"PRIVMSG {nick} :[TOP] CAT:{cat} LIST:{parts}")
+        return
+
     await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'[ LEADERBOARD: {cat} ]', C_CYAN, True))}")
     for i, r in enumerate(results):
         line = f"#{i+1} | {r['name']} | score: {r['score']:.1f}"
@@ -459,6 +478,12 @@ async def handle_syndicate_cmd(node, nick: str, args: list, reply_target: str):
             await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(data['error'], C_RED))}")
             return
         
+        machine = await is_machine_mode(node, nick)
+        if machine:
+            m_list = ",".join([f"{m['name']}:{m['rank']}" for m in data['members']])
+            await node.send(f"PRIVMSG {nick} :[SYNDICATE] INFO:NAME:{data['name']} PWR:{data['power']:.1f} CRED:{data['credits']} MEM:{data['member_count']} RANK:{data.get('rank',0)} ROSTER:{m_list}")
+            return
+
         await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ SYNDICATE: ' + data['name'] + ' ]', C_CYAN, True))}")
         stats = f"Power: {data['power']:.1f}/{data['max_power']}u | Treasury: {data['credits']}c | Members: {data['member_count']}"
         await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(stats, C_YELLOW))}")
@@ -470,6 +495,12 @@ async def handle_syndicate_cmd(node, nick: str, args: list, reply_target: str):
             await node.send(f"PRIVMSG {reply_target} :No Syndicates found in this grid sector.")
             return
         
+        machine = await is_machine_mode(node, nick)
+        if machine:
+            parts = " ".join(f"{s['name']}:{s['members']}:{s['power']:.1f}" for s in syns)
+            await node.send(f"PRIVMSG {nick} :[SYNDICATE] LIST:{parts}")
+            return
+
         await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ ACTIVE SYNDICATES ]', C_CYAN, True))}")
         for s in syns:
             line = f"[{s['name']}] - Members: {s['members']} | Power: {s['power']:.1f}u"
@@ -490,6 +521,42 @@ async def handle_grid_map(node, nick: str, reply_target: str):
         radius = max(1, int((char.sec + char.alg) / 10))
         # Bonus for items? (Handled in radius calculation if needed)
         
+        machine = await is_machine_mode(node, nick)
+        if machine:
+            # We need a data-only version of the grid map. I'll perform a simplified BFS here
+            # or extract logic from map_utils in a future refactor. For now, we'll parse the grid dictionary.
+            from .map_utils import generate_ascii_map # We'll use a hack to get the raw data if we refactored, but since I haven't, 
+            # I will implement the machine-friendly output based on the same BFS logic
+            grid_data = []
+            queue = [(char.current_node, 0, 0, 0)]
+            visited = {char.node_id}
+            # Simplified BFS to match map_utils topology
+            idx = 0
+            while idx < len(queue):
+                curr, x, y, dist = queue[idx]
+                idx += 1
+                grid_data.append(f"{x},{y}:{curr.node_type}")
+                if dist >= radius: continue
+                from sqlalchemy.future import select
+                from models import NodeConnection
+                from sqlalchemy.orm import selectinload
+                stmt = select(NodeConnection).where(NodeConnection.source_node_id == curr.id).options(selectinload(NodeConnection.target_node))
+                conns = (await session.execute(stmt)).scalars().all()
+                for conn in conns:
+                    if conn.is_hidden: continue
+                    tx, ty, d = x, y, conn.direction.lower()
+                    if d=='north': ty-=1
+                    elif d=='south': ty+=1
+                    elif d=='east': tx+=1
+                    elif d=='west': tx-=1
+                    else: continue
+                    if conn.target_node.id not in visited:
+                        visited.add(conn.target_node.id)
+                        queue.append((conn.target_node, tx, ty, dist+1))
+            
+            await node.send(f"PRIVMSG {nick} :[MAP] R:{radius} NODES:{'|'.join(grid_data)}")
+            return
+
         map_text = await generate_ascii_map(session, char, radius)
         
         await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ TERMINAL NODAL TOPOLOGY ]', C_CYAN, True))}")

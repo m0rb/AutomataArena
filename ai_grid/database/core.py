@@ -10,11 +10,11 @@ CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 try:
     with open(CONFIG_FILE, 'r') as f:
         CONFIG = json.load(f)
-        db_name = CONFIG.get('database', {}).get('file', 'automata_arena.db')
+        db_name = CONFIG.get('database', {}).get('file', 'automata_grid.db')
         DB_FILE = os.path.join(BASE_DIR, db_name)
 except (FileNotFoundError, json.JSONDecodeError):
     CONFIG = {}
-    DB_FILE = os.path.join(BASE_DIR, 'automata_arena.db')
+    DB_FILE = os.path.join(BASE_DIR, 'automata_grid.db')
 
 # Shared Logger
 logger = logging.getLogger("grid_db")

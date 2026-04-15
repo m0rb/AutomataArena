@@ -122,7 +122,7 @@ class SyndicateRepository:
             return True, f"Withdrew {amount:.1f}u from Syndicate pool. Daily used: {member.daily_power_withdrawn:.1f}/{limit}u."
 
     async def get_syndicate_info(self, name: str, network: str) -> dict:
-        """Get stats for the character's syndicate."""
+        """Get stats for the character's syndicate, including Phase 7 warfare telemetry."""
         async with self.async_session() as session:
             stmt = select(Character).join(Player).join(NetworkAlias).where(
                 Character.name == name,
@@ -136,14 +136,103 @@ class SyndicateRepository:
             members_stmt = select(SyndicateMember).where(SyndicateMember.syndicate_id == syn.id).options(selectinload(SyndicateMember.character))
             members = (await session.execute(members_stmt)).scalars().all()
             
-            return {
+            data = {
+                "id": syn.id,
                 "name": syn.name,
                 "power": syn.power_stored,
                 "max_power": syn.max_power,
                 "credits": syn.credits,
                 "member_count": len(members),
-                "members": [{"name": m.character.name, "rank": m.rank} for m in members]
+                "members": [{"name": m.character.name, "rank": m.rank} for m in members],
+                "target_syndicate_name": None,
+                "war_time_left": None,
+                "ceasefire_status": syn.ceasefire_status,
+                "enemy_proposed_ceasefire": False
             }
+
+            if syn.target_syndicate_id:
+                target = await session.get(Syndicate, syn.target_syndicate_id)
+                if target:
+                    data["target_syndicate_name"] = target.name
+                    if target.ceasefire_status == 'PROPOSED':
+                        data["enemy_proposed_ceasefire"] = True
+                    
+                if syn.war_active_until:
+                    now = datetime.datetime.now(datetime.timezone.utc)
+                    if syn.war_active_until > now:
+                        diff = syn.war_active_until - now
+                        hours, remainder = divmod(diff.total_seconds(), 3600)
+                        minutes, _ = divmod(remainder, 60)
+                        data["war_time_left"] = f"{int(hours)}h {int(minutes)}m"
+                    else:
+                        # Auto-resolve expired war
+                        syn.target_syndicate_id = None
+                        syn.war_active_until = None
+                        syn.ceasefire_status = 'NONE'
+                        if target:
+                            target.target_syndicate_id = None
+                            target.war_active_until = None
+                            target.ceasefire_status = 'NONE'
+                        await session.commit()
+
+            return data
+
+    async def get_syndicate_mission(self, name: str, network: str) -> dict:
+        """Fetch current active mission for the faction."""
+        async with self.async_session() as session:
+            stmt = select(Character).where(Character.name == name).options(selectinload(Character.syndicate))
+            char = (await session.execute(stmt)).scalars().first()
+            if not char or not char.syndicate_id: return {"error": "Membership required."}
+            
+            syn = await session.get(Syndicate, char.syndicate_id)
+            if not syn.current_mission_id: return {"active": False}
+            
+            from models import SyndicateMission
+            mission = await session.get(SyndicateMission, syn.current_mission_id)
+            if not mission or not mission.is_active: return {"active": False}
+            
+            return {
+                "active": True,
+                "mission": {
+                    "type": mission.mission_type,
+                    "target": mission.target_value,
+                    "current": mission.current_value,
+                    "reward": mission.reward_credits
+                }
+            }
+
+    async def start_syndicate_mission(self, name: str, network: str) -> tuple:
+        """Rank 2+ only. Initiates a random faction objective."""
+        async with self.async_session() as session:
+            stmt = select(SyndicateMember).join(Character).where(Character.name == name).options(selectinload(SyndicateMember.syndicate))
+            member = (await session.execute(stmt)).scalars().first()
+            if not member or member.rank < 2: return False, "Insufficient privileges."
+            
+            syn = member.syndicate
+            if syn.current_mission_id: return False, "A mission is already active."
+            
+            import random
+            from models import SyndicateMission
+            m_types = [
+                ("POWER", 5000.0, 2000.0),
+                ("SABOTAGE", 10.0, 3500.0),
+                ("MOB_SLAYER", 25.0, 1500.0)
+            ]
+            m_type, target, reward = random.choice(m_types)
+            
+            new_mission = SyndicateMission(
+                syndicate_id=syn.id,
+                mission_type=m_type,
+                target_value=target,
+                reward_credits=reward,
+                expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=48)
+            )
+            session.add(new_mission)
+            await session.flush()
+            
+            syn.current_mission_id = new_mission.id
+            await session.commit()
+            return True, f"Mission Accepted: {m_type}. Objective: {target} | Reward: {reward}c"
 
     async def list_syndicates(self) -> list:
         """Return a list of all syndicates."""
@@ -154,6 +243,7 @@ class SyndicateRepository:
             
             output = []
             for s in syns:
+                from sqlalchemy import func
                 m_stmt = select(func.count(SyndicateMember.id)).where(SyndicateMember.syndicate_id == s.id)
                 count = (await session.execute(m_stmt)).scalar() or 0
                 output.append({"name": s.name, "members": count, "power": s.power_stored})

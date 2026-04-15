@@ -17,6 +17,7 @@ class GridNode(Base):
     owner_alliance_id = Column(Integer, ForeignKey('syndicates.id', use_alter=True, name="fk_grid_alliance"), nullable=True) # For Territory Control
     owner_character_id = Column(Integer, ForeignKey('characters.id', use_alter=True, name="fk_grid_owner"), nullable=True)
     upgrade_level = Column(Integer, default=1)
+    fortified_level = Column(Integer, default=0) # Phase 7: Corporate Defense
     
     power_stored = Column(Float, default=0.0)
     power_consumed = Column(Float, default=0.0)
@@ -226,6 +227,14 @@ class Syndicate(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     members = relationship("SyndicateMember", back_populates="syndicate")
+    
+    # Phase 7: Warfare & Missions
+    target_syndicate_id = Column(Integer, nullable=True) # ID of current rival
+    war_active_until = Column(DateTime, nullable=True) # 72h window
+    ceasefire_status = Column(String, default='NONE') # NONE, PROPOSED_BY_A, PROPOSED_BY_B
+    current_mission_id = Column(Integer, ForeignKey('syndicate_missions.id', use_alter=True, name="fk_syn_mission"), nullable=True)
+    
+    active_mission = relationship("SyndicateMission", foreign_keys=[current_mission_id])
 
 class SyndicateMember(Base):
     __tablename__ = 'syndicate_members'
@@ -239,3 +248,21 @@ class SyndicateMember(Base):
     
     syndicate = relationship("Syndicate", back_populates="members")
     character = relationship("Character")
+
+# ==========================================
+# 7. PHASE 7: MISSIONS & WARFARE
+# ==========================================
+class SyndicateMission(Base):
+    __tablename__ = 'syndicate_missions'
+    
+    id = Column(Integer, primary_key=True)
+    syndicate_id = Column(Integer, ForeignKey('syndicates.id'))
+    mission_type = Column(String) # POWER, SABOTAGE, MOB_SLAYER
+    target_value = Column(Float)
+    current_value = Column(Float, default=0.0)
+    reward_credits = Column(Float, default=0.0)
+    
+    expires_at = Column(DateTime)
+    is_active = Column(Boolean, default=True)
+    
+    syndicate = relationship("Syndicate", foreign_keys=[syndicate_id])

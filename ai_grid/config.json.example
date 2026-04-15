@@ -11,7 +11,7 @@
     "level": "DEBUG"
     },
     "database": {
-        "file": "automata_arena.db"
+        "file": "automata_grid.db"
     },
     "networks": {
         "2600net": {

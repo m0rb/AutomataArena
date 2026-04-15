@@ -161,7 +161,10 @@ class PlayerRepository:
                 Character.name == name,
                 NetworkAlias.nickname == name,
                 NetworkAlias.network_name == network
-            ).options(selectinload(Character.inventory).selectinload(InventoryItem.template))
+            ).options(
+                selectinload(Character.inventory).selectinload(InventoryItem.template),
+                selectinload(Character.syndicate).selectinload(Syndicate.active_mission)
+            )
             
             result = await session.execute(stmt)
             char = result.scalars().first()
@@ -192,7 +195,9 @@ class PlayerRepository:
                     'current_hp': char.current_hp,
                     'max_hp': char.ram * 5,
                     'data_units': char.data_units,
-                    'syndicate_id': char.syndicate_id
+                    'syndicate_id': char.syndicate_id,
+                    'active_mission': char.syndicate.active_mission.mission_type if char.syndicate and char.syndicate.active_mission else None,
+                    'war_target': char.syndicate.target_syndicate_id if char.syndicate else None
                 }
             return None
 
@@ -263,6 +268,25 @@ async def increment_daily_task(session, char, task_key):
     char.daily_tasks = json.dumps(tasks)
     return reward_msg
 
+async def update_faction_mission(session, syndicate_id, mission_type, amount):
+    """Increments progress for a syndicate's active mission."""
+    from models import Syndicate, SyndicateMission
+    stmt = select(Syndicate).where(Syndicate.id == syndicate_id).options(selectinload(Syndicate.active_mission))
+    result = await session.execute(stmt)
+    syn = result.scalars().first()
+    
+    if syn and syn.active_mission and syn.active_mission.is_active:
+        mission = syn.active_mission
+        if mission.mission_type == mission_type:
+            mission.current_value += amount
+            if mission.current_value >= mission.target_value:
+                # Mission Complete!
+                mission.is_active = False
+                syn.credits += mission.reward_credits
+                syn.current_mission_id = None
+                return f"[SIGACT] 🏆 Syndicate Mission Complete: {mission_type}! +{mission.reward_credits}c to the vault."
+    return None
+
     async def active_powergen(self, name: str, network: str) -> tuple:
         async with self.async_session() as session:
             stmt = select(Character).join(Player).join(NetworkAlias).where(
@@ -276,6 +300,11 @@ async def increment_daily_task(session, char, task_key):
             
             p_gain = 10.0
             char.power = min(100.0, char.power + p_gain)
+            
+            # Phase 7: Mission Hook
+            if char.syndicate_id:
+                await update_faction_mission(session, char.syndicate_id, "POWER", p_gain)
+                
             await session.commit()
             return True, f"Manual power generation complete. (+{p_gain} uP)"
 
@@ -331,3 +360,101 @@ async def increment_daily_task(session, char, task_key):
                         char.stability = min(100.0, char.stability + 0.5)
             
             await session.commit()
+
+    async def declare_war(self, nick: str, network: str, target_name: str) -> tuple:
+        """Initiates a 72-hour war with another syndicate."""
+        from models import Syndicate, SyndicateMember
+        async with self.async_session() as session:
+            stmt = select(Character).join(NetworkAlias).where(NetworkAlias.nickname == nick, NetworkAlias.network_name == network)
+            char = (await session.execute(stmt)).scalars().first()
+            if not char or not char.syndicate_id: return False, "You aren't in a Syndicate."
+            
+            # Check rank (Must be Rank 2+)
+            m_stmt = select(SyndicateMember).where(SyndicateMember.character_id == char.id)
+            member = (await session.execute(m_stmt)).scalars().first()
+            if not member or member.rank < 2: return False, "Insufficient rank to declare war."
+            
+            # Find target
+            t_stmt = select(Syndicate).where(Syndicate.name == target_name)
+            target = (await session.execute(t_stmt)).scalars().first()
+            if not target: return False, f"Syndicate '{target_name}' not found."
+            if target.id == char.syndicate_id: return False, "You cannot declare war on yourself."
+            
+            source_syn = await session.get(Syndicate, char.syndicate_id)
+            if source_syn.target_syndicate_id: return False, "You are already at war or in negotiations."
+            
+            # Initiate War
+            war_end = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=72)
+            source_syn.target_syndicate_id = target.id
+            source_syn.war_active_until = war_end
+            source_syn.ceasefire_status = 'NONE'
+            
+            target.target_syndicate_id = source_syn.id
+            target.war_active_until = war_end
+            target.ceasefire_status = 'NONE'
+            
+            await session.commit()
+            return True, f"WAR DECLARED: Conflict with {target_name} will persist for 72 hours."
+
+    async def manage_ceasefire(self, nick: str, network: str, action: str) -> tuple:
+        """Handle ceasefire proposals. Logic: If both propose, war ends."""
+        from models import Syndicate, SyndicateMember
+        async with self.async_session() as session:
+            stmt = select(Character).join(NetworkAlias).where(NetworkAlias.nickname == nick, NetworkAlias.network_name == network)
+            char = (await session.execute(stmt)).scalars().first()
+            if not char or not char.syndicate_id: return False, "Fighter offline or unaffiliated."
+            
+            m_stmt = select(SyndicateMember).where(SyndicateMember.character_id == char.id)
+            member = (await session.execute(m_stmt)).scalars().first()
+            if not member or member.rank < 2: return False, "Admins only."
+            
+            syn = await session.get(Syndicate, char.syndicate_id)
+            if not syn.target_syndicate_id: return False, "Not currently at war."
+            
+            target_syn = await session.get(Syndicate, syn.target_syndicate_id)
+            
+            if action == 'propose':
+                syn.ceasefire_status = 'PROPOSED'
+                if target_syn.ceasefire_status == 'PROPOSED':
+                    # RESOLVE: Both agreed
+                    target_name = target_syn.name
+                    syn.target_syndicate_id = None
+                    syn.war_active_until = None
+                    syn.ceasefire_status = 'NONE'
+                    target_syn.target_syndicate_id = None
+                    target_syn.war_active_until = None
+                    target_syn.ceasefire_status = 'NONE'
+                    await session.commit()
+                    return True, f"CEASEFIRE RATIFIED. Peace restored with {target_name}."
+                else:
+                    await session.commit()
+                    return True, "Ceasefire proposal transmitted. Waiting for enemy response."
+            elif action == 'reject':
+                syn.ceasefire_status = 'NONE'
+                target_syn.ceasefire_status = 'NONE'
+                await session.commit()
+                return True, "Ceasefire rejected. The conflict continues."
+            return False, "Unknown diplomatic action."
+
+    async def fortify_node(self, nick: str, network: str) -> tuple:
+        """Upgrade node fortified_level using Syndicate pool (500 Power + 1000 Credits)."""
+        from models import Syndicate, SyndicateMember, GridNode
+        async with self.async_session() as session:
+            stmt = select(Character).join(NetworkAlias).options(selectinload(Character.current_node)).where(NetworkAlias.nickname == nick, NetworkAlias.network_name == network)
+            char = (await session.execute(stmt)).scalars().first()
+            if not char or not char.current_node: return False, "Uplink failure."
+            
+            node = char.current_node
+            if node.owner_alliance_id != char.syndicate_id: return False, "This node does not belong to your Syndicate."
+            if node.fortified_level >= 5: return False, "Maximum fortification reached."
+            
+            syn = await session.get(Syndicate, char.syndicate_id)
+            cost_pwr, cost_cred = 500.0, 1000.0
+            if syn.power_stored < cost_pwr or syn.credits < cost_cred:
+                return False, f"Insufficient Syndicate resources. Need {cost_pwr}u Power and {cost_cred}c Credits."
+            
+            syn.power_stored -= cost_pwr
+            syn.credits -= cost_cred
+            node.fortified_level += 1
+            await session.commit()
+            return True, f"Node {node.name} fortified to Level {node.fortified_level}."

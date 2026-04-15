@@ -12,7 +12,6 @@ from database.grid_repo import GridRepository
 from database.economy_repo import EconomyRepository
 from database.mainframe_repo import MainframeRepository
 from database.minigame_repo import MiniGameRepository
-from database.syndicate_repo import SyndicateRepository
 from database.combat_repo import CombatRepository
 
 class ArenaDB:
@@ -28,7 +27,6 @@ class ArenaDB:
         self.combat = CombatRepository(self.async_session)
         self.mainframe = MainframeRepository(self.async_session)
         self.minigame = MiniGameRepository(self.async_session)
-        self.syndicate = SyndicateRepository(self.async_session)
 
     async def close(self):
         await self.engine.dispose()
@@ -152,13 +150,6 @@ class ArenaDB:
     async def guess_cipher(self, name, net, guess): return await self.minigame.submit_guess(name, net, guess)
     async def get_leaderboard(self, cat): return await self.minigame.get_leaderboard(cat)
 
-    # Syndicate & Alliances
-    async def create_syndicate(self, name, net, sname): return await self.syndicate.create_syndicate(name, net, sname)
-    async def join_syndicate(self, name, net, sname): return await self.syndicate.join_syndicate(name, net, sname)
-    async def store_power(self, name, net, amt): return await self.syndicate.store_power(name, net, amt)
-    async def draw_power(self, name, net, amt): return await self.syndicate.draw_power(name, net, amt)
-    async def get_syndicate_info(self, name, net): return await self.syndicate.get_syndicate_info(name, net)
-    async def list_syndicates(self): return await self.syndicate.list_syndicates()
 
     # Mainframe (The Gibson)
     async def get_gibson_status(self, name, network): return await self.mainframe.get_gibson_status(name, network)

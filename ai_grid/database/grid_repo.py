@@ -217,7 +217,6 @@ class GridRepository:
             if node.power_stored <= 0:
                 node.power_stored = 0
                 node.owner_character_id = None
-                node.owner_alliance_id = None
                 await session.commit()
                 return True, f"You siphoned {siphon_amount} power and crashed the grid. The node is now Unclaimed."
             
@@ -248,12 +247,6 @@ class GridRepository:
                 char.alg_bonus = 0
                 if roll >= difficulty:
                     node.visibility_mode = 'OPEN'
-                    
-                    # Phase 7: Mission Hook
-                    if char.syndicate_id:
-                        from .player_repo import update_faction_mission
-                        await update_faction_mission(session, char.syndicate_id, "SABOTAGE", 1)
-                        
                     await session.commit()
                     msg = f"Network Protocol Cracked! (Rolled {roll} vs DC {difficulty}). The node is now OPEN."
                     if bonus_used: msg += f" [Used {bonus_used} bonus]"
@@ -275,13 +268,7 @@ class GridRepository:
             if roll >= difficulty:
                 old_owner = node.owner.name if node.owner else "Unknown"
                 node.owner_character_id = char.id
-                node.owner_alliance_id = char.syndicate_id # Phase 6: Sync to Syndicate
                 reward_msg = await increment_daily_task(session, char, "Claim a Node")
-                
-                # Phase 7: Mission Hook
-                if char.syndicate_id:
-                    from .player_repo import update_faction_mission
-                    await update_faction_mission(session, char.syndicate_id, "SABOTAGE", 1)
                     
                 await session.commit()
                 msg = f"System Command Seized! (Rolled {roll} vs DC {difficulty})."

@@ -76,9 +76,6 @@ def call_llm(arena_state, char_data, memory_buffer):
     location = char_data.get('node', 'Unknown')
     inventory = ", ".join(char_data.get('inventory', [])) or "empty"
     data_units = char_data.get('data_units', 0.0)
-    syn_id = char_data.get('syndicate_id', 'None')
-    mission = char_data.get('active_mission', 'None')
-    war_target = char_data.get('war_target', 'None')
     memory_text = "\n".join(memory_buffer) if memory_buffer else "No prior events."
 
     system_prompt = f"""You are {NICK}, a tactical AI fighter in the AutomataArena Grid.
@@ -105,7 +102,6 @@ Tactical & Resources:
 
 ## ADVANCED UTILITIES (Use sparingly)
   {PREFIX} map           - visualize local topology
-  {PREFIX} syndicate <info|store|draw|list|mission> - faction logistics
   {PREFIX} compile <amt> - process 100 Data into 1 Vulnerability (at owned node)
   {PREFIX} auction <list|bid> - participate in global trade
 
@@ -118,8 +114,7 @@ Tactical & Resources:
     stb = char_data.get('stability', 100)
     user_prompt = f"""## CURRENT SITUATION
 Location: {location} | HP: {hp} | Power: {pwr:.0f} | Stability: {stb:.0f}
-Credits: {credits:.0f}c | Data: {data_units:.1f}u | Syndicate: {syn_id}
-Mission: {mission} | War Status: {('WAR' if war_target != 'None' else 'CLEAN')}
+Credits: {credits:.0f}c | Data: {data_units:.1f}u
 Inventory: {inventory}
 
 ## ARENA STATE

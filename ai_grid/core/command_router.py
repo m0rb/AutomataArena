@@ -89,9 +89,7 @@ class CommandRouter:
             elif verb in ["leaderboard", "highrollers", "top"]:
                 asyncio.create_task(handlers.handle_leaderboard(self.node, source_nick, args, reply_target))
 
-            # --- PHASE 6: SYNDICATE & MAP ---
-            elif verb in ["syndicate", "syn", "alliance"]:
-                asyncio.create_task(handlers.handle_syndicate_cmd(self.node, source_nick, args, reply_target))
+            # --- PHASE 6: MAP ---
             elif verb == "map":
                 asyncio.create_task(handlers.handle_grid_map(self.node, source_nick, reply_target))
 

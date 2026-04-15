@@ -41,8 +41,6 @@ async def handle_help(node, nick: str, args: list, reply_target: str):
         "hack": {"desc": "Sabotage foreign node integrity or siphon data.", "syntax": "hack", "cost": "30u Power"},
         "raid": {"desc": "Rapid resource extraction from a local node.", "syntax": "raid"},
         "breach": {"desc": "Brute-force entry into high-sec architectures.", "syntax": "breach"},
-        "syndicate": {"desc": "Faction logistics.", "syntax": "syndicate <list|info|store|draw|create|join>"},
-        "cipher": {"desc": "Initiate decryption of guarded data nodes.", "syntax": "cipher"},
         "guess": {"desc": "Submit a decryption sequence code.", "syntax": "guess <code>"},
         "dice": {"desc": "PvP credit gambling.", "syntax": "dice <amt> <nick>"},
         "top": {"desc": "View global High Roller leaderboards.", "syntax": "top"},
@@ -72,7 +70,7 @@ async def handle_help(node, nick: str, args: list, reply_target: str):
         "🆔 IDENTITY": ["register", "info", "tasks", "options"],
         "💰 ECONOMY": ["shop", "buy/sell", "auction", "market"],
         "🏗️ THE GIBSON": ["mainframe", "compile", "assemble", "use"],
-        "⚔️ TACTICAL": ["claim", "upgrade", "hack/raid", "syndicate", "repair"],
+        "⚔️ TACTICAL": ["claim", "upgrade", "hack/raid", "repair"],
         "🎮 GAMES": ["cipher/guess", "dice", "top", "attack/rob", "queue/ready"]
     }
 
@@ -445,110 +443,7 @@ async def handle_leaderboard(node, nick: str, args: list, reply_target: str):
     await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'[ LEADERBOARD: {cat} ]', C_CYAN, True))}")
     for i, r in enumerate(results):
         line = f"#{i+1} | {r['name']} | score: {r['score']:.1f}"
-        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(line, C_GREEN))}")
-
-# --- PHASE 6: SYNDICATE & MAP ---
-
-async def handle_syndicate_cmd(node, nick: str, args: list, reply_target: str):
-    """Syndicate management: create, join, store, draw, info, list."""
-    if not args:
-        await node.send(f"PRIVMSG {reply_target} :Usage: {node.prefix} syndicate <create|join|store|draw|info|list|mission|declare|ceasefire|fortify>")
-        return
-        
-    sub = args[0].lower()
-    if sub == "create" and len(args) >= 2:
-        success, msg = await node.db.create_syndicate(nick, node.net_name, args[1])
-        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
-    elif sub == "join" and len(args) >= 2:
-        success, msg = await node.db.join_syndicate(nick, node.net_name, args[1])
-        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
-    elif sub == "store" and len(args) >= 2:
-        try: amt = float(args[1])
-        except: amt = 0
-        success, msg = await node.db.store_power(nick, node.net_name, amt)
-        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
-    elif sub == "draw" and len(args) >= 2:
-        try: amt = float(args[1])
-        except: amt = 0
-        success, msg = await node.db.draw_power(nick, node.net_name, amt)
-        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
-    elif sub == "info":
-        data = await node.db.get_syndicate_info(nick, node.net_name)
-        if "error" in data:
-            await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(data['error'], C_RED))}")
-            return
-        
-        machine = await is_machine_mode(node, nick)
-        if machine:
-            m_list = ",".join([f"{m['name']}:{m['rank']}" for m in data['members']])
-            await node.send(f"PRIVMSG {nick} :[SYNDICATE] INFO:NAME:{data['name']} PWR:{data['power']:.1f} CRED:{data['credits']} MEM:{data['member_count']} RANK:{data.get('rank',0)} ROSTER:{m_list}")
-            return
-
-        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ SYNDICATE: ' + data['name'] + ' ]', C_CYAN, True))}")
-        stats = f"Power: {data['power']:.1f}/{data['max_power']}u | Treasury: {data['credits']}c | Members: {data['member_count']}"
-        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(stats, C_YELLOW))}")
-        
-        # Warfare Status
-        if data.get('target_syndicate_name'):
-            war_info = f"AT WAR WITH: {data['target_syndicate_name']} | Time Remaining: {data['war_time_left']}"
-            await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(war_info, C_RED, True))}")
-            if data.get('ceasefire_status') == 'PROPOSED':
-                await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('DIPLOMACY: Ceasefire proposed by your faction.', C_CYAN))}")
-            elif data.get('enemy_proposed_ceasefire'):
-                await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('DIPLOMACY: Enemy has requested a ceasefire. Use ceasefire propose to accept.', C_YELLOW))}")
-
-        m_list = ", ".join([f"{m['name']}(LV{m['rank']})" for m in data['members'][:10]])
-        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'Roster: {m_list}', C_WHITE))}")
-    elif sub == "list":
-        syns = await node.db.list_syndicates()
-        if not syns:
-            await node.send(f"PRIVMSG {reply_target} :No Syndicates found in this grid sector.")
-            return
-        
-        machine = await is_machine_mode(node, nick)
-        if machine:
-            parts = " ".join(f"{s['name']}:{s['members']}:{s['power']:.1f}" for s in syns)
-            await node.send(f"PRIVMSG {nick} :[SYNDICATE] LIST:{parts}")
-            return
-
-        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ ACTIVE SYNDICATES ]', C_CYAN, True))}")
-        for s in syns:
-            line = f"[{s['name']}] - Members: {s['members']} | Power: {s['power']:.1f}u"
-            await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(line, C_GREEN))}")
-            
-    elif sub == "mission":
-        # logic for viewing or starting missions
-        action = args[1].lower() if len(args) > 1 else "view"
-        if action == "view":
-            data = await node.db.get_syndicate_mission(nick, node.net_name)
-            if "error" in data:
-                await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(data['error'], C_RED))}")
-            elif data['active']:
-                m = data['mission']
-                await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ SYNDICATE MISSION ACTIVE ]', C_CYAN, True))}")
-                progress = f"Type: {m['type']} | Progress: {m['current']}/{m['target']} | Reward: {m['reward']}c"
-                await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(progress, C_YELLOW))}")
-            else:
-                await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('No active mission. Admins use !syn mission start.', C_WHITE))}")
-        elif action == "start":
-            success, msg = await node.db.start_syndicate_mission(nick, node.net_name)
-            await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
-
-    elif sub == "declare" and len(args) >= 2:
-        success, msg = await node.db.declare_war(nick, node.net_name, args[1])
-        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_RED if success else C_CYAN, True))}")
-
-    elif sub == "ceasefire":
-        action = args[1].lower() if len(args) > 1 else "propose"
-        success, msg = await node.db.manage_ceasefire(nick, node.net_name, action)
-        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
-
-    elif sub == "fortify":
-        success, msg = await node.db.fortify_node(nick, node.net_name)
-        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
-
-    else:
-        await node.send(f"PRIVMSG {reply_target} :Sub-command '{sub}' not recognized.")
+        await node.send(f"PRIVMSG {reply_target} :{target} :Sub-command '{sub}' not recognized.")
 
 async def handle_grid_map(node, nick: str, reply_target: str):
     """Render the ASCII grid map."""

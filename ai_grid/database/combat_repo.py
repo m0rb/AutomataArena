@@ -102,13 +102,9 @@ class CombatRepository:
                             session.add(InventoryItem(character_id=char.id, template_id=tpl.id))
                         result["loot"] = loot_name
 
+                # Post-combat processing
                 reward_msg = await increment_daily_task(session, char, "Kill a Grid Bug")
                 result["task_reward"] = reward_msg
-                
-                # Phase 7: Mission Hook
-                if char.syndicate_id:
-                    from .player_repo import update_faction_mission
-                    await update_faction_mission(session, char.syndicate_id, "MOB_SLAYER", 1)
 
             else:
                 penalty = char.credits * 0.10

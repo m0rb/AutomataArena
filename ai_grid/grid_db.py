@@ -1,11 +1,14 @@
-# grid_db.py - v1.5.0
 import asyncio
 import argparse
 import logging
+import os
+import shutil
+import datetime
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 
-from models import Base, GridNode, NodeConnection, ItemTemplate, Player, NetworkAlias
+from models import Base, Character, GridNode, NodeConnection, ItemTemplate, Player, NetworkAlias
 from database.core import DB_FILE, logger, GRID_EXPANSION, GRID_CONNECTIONS, LOOT_TEMPLATES
 from database.player_repo import PlayerRepository
 from database.grid_repo import GridRepository
@@ -65,6 +68,88 @@ class ArenaDB:
             
             await session.commit()
         logger.info("Schema successfully initialized.")
+
+    async def create_snapshot(self):
+        """Creates a timestamped backup of the current database."""
+        if not os.path.exists(DB_FILE):
+             logger.warning("No database file found to snapshot.")
+             return False
+        
+        bak_file = f"{DB_FILE}.bak"
+        shutil.copy2(DB_FILE, bak_file)
+        logger.info(f"Database snapshot created: {bak_file}")
+        return True
+
+    async def rollback_schema(self):
+        """Reverts the database to the latest .bak snapshot."""
+        bak_file = f"{DB_FILE}.bak"
+        if not os.path.exists(bak_file):
+            logger.error("No snapshot found to rollback to.")
+            return False, "No snapshot file detected."
+            
+        shutil.copy2(bak_file, DB_FILE)
+        logger.info("Database rolled back to snapshot successfully.")
+        return True, "Rollback successful."
+
+    async def update_schema(self):
+        """Non-destructive schema update (Reflective Migration)."""
+        logger.info("Starting reflective schema update...")
+        await self.create_snapshot()
+        
+        def sync_columns(conn):
+            inspector = inspect(conn)
+            for table_name, table in Base.metadata.tables.items():
+                existing_cols = [c['name'] for c in inspector.get_columns(table_name)]
+                for col_name, col in table.columns.items():
+                    if col_name not in existing_cols:
+                        logger.info(f"Adding missing column: {table_name}.{col_name}")
+                        # SQLite-specific ALTER TABLE logic
+                        col_type = col.type.compile(dialect=conn.dialect)
+                        # Handle defaults if possible
+                        default_val = f" DEFAULT {col.default.arg}" if col.default else ""
+                        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}{default_val}"))
+
+        async with self.engine.begin() as conn:
+            await conn.run_sync(sync_columns)
+        
+        logger.info("Schema update complete.")
+        return True
+
+    async def verify_integrity(self):
+        """Audit the database for core nodes and broken records."""
+        logger.info("Running database integrity audit...")
+        issues = []
+        async with self.async_session() as session:
+            # 1. Check Uplink
+            uplink = (await session.execute(select(GridNode).where(GridNode.name == "The_Grid_Uplink"))).scalars().first()
+            if not uplink: issues.append("[CRITICAL] The_Grid_Uplink node is missing.")
+            
+            # 2. Check Item Templates
+            items = (await session.execute(select(ItemTemplate))).scalars().all()
+            if len(items) < 2: issues.append("[WARNING] Core item templates (Food/Weapon) are missing.")
+            
+            # 3. Check for Ghost Characters (no owner)
+            ghosts = (await session.execute(select(Character).where(Character.player_id == None))).scalars().all()
+            if ghosts: issues.append(f"[WARNING] Detected {len(ghosts)} orphaned 'Ghost' characters.")
+
+        if not issues: logger.info("Integrity check passed: No issues detected.")
+        else:
+            for issue in issues: logger.warning(issue)
+        return issues
+
+    async def run_repairs(self):
+        """Self-heal core data and connections."""
+        logger.info("Executing database self-repair...")
+        await self.seed_grid_expansion()
+        # Ensure at least The_Grid_Uplink exists
+        async with self.async_session() as session:
+            uplink = (await session.execute(select(GridNode).where(GridNode.name == "The_Grid_Uplink"))).scalars().first()
+            if not uplink:
+                session.add(GridNode(name="The_Grid_Uplink", description="Central nexus.", node_type="safezone"))
+                await session.commit()
+                logger.info("Restored missing central nexus (Uplink).")
+        logger.info("Repair sequence finished.")
+        return True
 
     async def seed_grid_expansion(self):
         async with self.async_session() as session:
@@ -169,6 +254,10 @@ async def async_main():
     parser.add_argument("--network", type=str, help="Filter by network")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     subparsers.add_parser("init", help="Initialize the database schema")
+    subparsers.add_parser("update", help="Non-destructive schema sync + seed maps")
+    subparsers.add_parser("check", help="Run database integrity audit")
+    subparsers.add_parser("rollback", help="Revert to last .bak snapshot")
+    subparsers.add_parser("repair", help="Run automatic self-repair sequence")
     subparsers.add_parser("reseed", help="Update grid expansion nodes and connections")
     subparsers.add_parser("list", help="List all registered fighters")
     del_parser = subparsers.add_parser("delete", help="Delete a player")
@@ -178,6 +267,22 @@ async def async_main():
     if args.command == "init":
         await db.init_schema()
         print("[*] Database schema initialized.")
+    elif args.command == "update":
+        await db.update_schema()
+        await db.seed_grid_expansion()
+        print("[*] Reflective update complete. Map seeded.")
+    elif args.command == "check":
+        issues = await db.verify_integrity()
+        if not issues: print("[*] Integrity check passed.")
+        else:
+            print("[!] Found the following issues:")
+            for i in issues: print(f"  - {i}")
+    elif args.command == "rollback":
+        success, msg = await db.rollback_schema()
+        print(f"[{'*' if success else '!'}] {msg}")
+    elif args.command == "repair":
+        await db.run_repairs()
+        print("[*] Repair sequence completed.")
     elif args.command == "reseed":
         await db.seed_grid_expansion()
         print("[*] Grid expansion re-seeded.")

@@ -1,6 +1,5 @@
-Here is a draft for the `README.md` that you can include in your GitHub repository and the ZIP file. It covers both the casual players who just want to connect their API key and fight, and the sysadmins who might want to fork the manager to run their own arenas.
 
-AutomataArena is a fully autonomous, asynchronous text-based combat engine built for modern IRC networks. Powered by local LLMs (like Qwen) and a Python backend, it features dynamic AI matchmaking, real-time PvE/PvP turn-based combat, cryptographic token authentication, and dynamically generated fighter lore. Complete with IPv6-proof parsing, robust SysAdmin telemetrics, and an SDK for building your own AI gladiator bots.
+AutomataArena is a fully autonomous, asynchronous text-based combat engine built for modern IRC networks. Powered by local LLMs (like Qwen) and a Python backend, it features dynamic AI matchmaking, real-time PvE/PvP turn-based combat, cryptographic token authentication, and dynamically generated fighter lore. Complete with IPv4/6 support, robust SysAdmin telemetrics, and an SDK for building your own AI player bots.
 
 
 ***

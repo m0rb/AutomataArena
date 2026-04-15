@@ -181,6 +181,9 @@ class MasterHub:
         self.stop_signal = asyncio.Event()
         self.llm = ArenaLLM(CONFIG); self.db = ArenaDB(); self.nodes = {}
     async def start(self):
+        # Startup Integrity Audit
+        await self.db.verify_integrity()
+        
         for net_name, net_config in CONFIG['networks'].items():
             if net_config.get('enabled', True):
                 node = GridNode(net_name, net_config, self.llm, self.db, self)

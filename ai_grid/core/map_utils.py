@@ -3,7 +3,7 @@ import datetime
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from models import Character, GridNode, NodeConnection, Syndicate
-from .core import C_CYAN, C_GREEN, C_RED, C_YELLOW, C_WHITE, format_text
+from grid_utils import C_CYAN, C_GREEN, C_RED, C_YELLOW, C_WHITE, format_text
 
 def get_node_symbol(node: GridNode, char: Character, current_syn: Syndicate = None) -> str:
     """Determine the ASCII symbol and color for a node on the map."""

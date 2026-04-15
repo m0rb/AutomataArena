@@ -5,7 +5,8 @@ import json
 import random
 import textwrap
 import time
-from grid_utils import format_text, build_banner, ICONS, C_GREEN, C_CYAN, C_RED, C_YELLOW
+from grid_utils import format_text, build_banner, ICONS, C_GREEN, C_CYAN, C_RED, C_YELLOW, C_WHITE
+from map_utils import generate_ascii_map
 
 logger = logging.getLogger("manager")
 
@@ -143,6 +144,321 @@ async def handle_ready(node, nick: str, token: str, reply_target: str):
     else:
         await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'[AUTH FAIL] {nick} Cryptographic mismatch.', C_RED))}")
 
+async def handle_powergen(node, nick: str, reply_target: str):
+    if not await check_rate_limit(node, nick, reply_target, cooldown=60): return
+    success, msg = await node.db.active_powergen(nick, node.net_name)
+    banner = format_text(msg, C_GREEN if success else C_RED)
+    await node.send(f"PRIVMSG {reply_target} :{build_banner(banner)}")
+    if success:
+        await node.send(f"PRIVMSG {node.config['channel']} :{build_banner(format_text(f'[SIGACT] {nick} initiated an active power generation cycle.', C_CYAN))}")
+
+async def handle_training(node, nick: str, reply_target: str):
+    if not await check_rate_limit(node, nick, reply_target, cooldown=60): return
+    success, msg = await node.db.active_training(nick, node.net_name)
+    banner = format_text(msg, C_GREEN if success else C_RED)
+    await node.send(f"PRIVMSG {reply_target} :{build_banner(banner)}")
+    if success:
+        await node.send(f"PRIVMSG {node.config['channel']} :{build_banner(format_text(f'[SIGACT] {nick} completed a structural maintenance drill.', C_CYAN))}")
+
+async def handle_node_explore(node, nick: str, reply_target: str):
+    if not await check_rate_limit(node, nick, reply_target, cooldown=45): return
+    result = await node.db.explore_node(nick, node.net_name)
+    
+    if "error" in result:
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(result['error'], C_RED))}")
+        return
+    
+    banner = format_text(result['msg'], C_GREEN if result['status'] == 'success' else C_YELLOW)
+    await node.send(f"PRIVMSG {reply_target} :{build_banner(banner)}")
+    
+    if result.get("danger") == "GRID_BUG_SPAWN":
+        # Manually trigger a mob encounter with a Level 0 Grid Bug
+        loc = await node.db.get_location(nick, node.net_name)
+        await handle_mob_encounter(node, nick, loc['name'], 0, None, reply_target)
+    
+    if result['status'] == 'success':
+        await node.send(f"PRIVMSG {node.config['channel']} :{build_banner(format_text(f'[SIGACT] Grid Discovery: {nick} uncovered architectural secrets at their current position!', C_CYAN))}")
+
+async def handle_gibson_status(node, nick: str, reply_target: str):
+    """View status of Gibson mainframe tasks."""
+    data = await node.db.get_gibson_status(nick, node.net_name)
+    if "error" in data:
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(data['error'], C_RED))}")
+        return
+    
+    machine = await is_machine_mode(node, nick)
+    if machine:
+        tasks = ",".join([f"{t['type']}:{t['remaining_sec']}s" for t in data['active_tasks']]) or "none"
+        await node.send(f"PRIVMSG {nick} :[GIBSON] DATA:{data['data']:.1f} VULNS:{data['vulns']} ZD:{data['zero_days']} HARVEST:{data['harvest_rate']:.1f} TASKS:{tasks}")
+        return
+
+    await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ MAINFRAME UI: THE GIBSON ]', C_CYAN, True))}")
+    storage = f"Raw Data: {data['data']:.1f} | Vulns: {data['vulns']} | Zero-Days: {data['zero_days']}"
+    await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(storage, C_GREEN))}")
+    
+    perf = f"Global Harvest Rate: {data['harvest_rate']:.1f} uP/tick | Character Power: {data['character_power']:.1f}"
+    await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(perf, C_YELLOW))}")
+    
+    if data['active_tasks']:
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('--- ACTIVE TASKS ---', C_CYAN))}")
+        for t in data['active_tasks']:
+            m, s = divmod(t['remaining_sec'], 60)
+            line = f"[{t['type']}] Yielding {t['amount']} units | ETA: {m}m {s}s"
+            await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(line, C_GREEN))}")
+    else:
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('Mainframe Idle. Ready for compilation.', C_CYAN))}")
+
+async def handle_gibson_compile(node, nick: str, args: list, reply_target: str):
+    """Start compilation task."""
+    try: amount = int(args[0]) if args else 100
+    except: amount = 100
+    
+    result = await node.db.start_compilation(nick, node.net_name, amount)
+    if "error" in result:
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(result['error'], C_RED))}")
+    else:
+        banner = format_text(result['msg'], C_GREEN)
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(banner)}")
+        usage = f"Power Consumed: {result['node_used']:.1f} (Node) | {result['char_used']:.1f} (Char)"
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(usage, C_YELLOW))}")
+
+async def handle_gibson_assemble(node, nick: str, reply_target: str):
+    """Start assembly task."""
+    result = await node.db.start_assembly(nick, node.net_name)
+    if "error" in result:
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(result['error'], C_RED))}")
+    else:
+        banner = format_text(result['msg'], C_GREEN)
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(banner)}")
+        usage = f"Power Consumed: {result['node_used']:.1f} (Node) | {result['char_used']:.1f} (Char)"
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(usage, C_YELLOW))}")
+
+async def handle_item_use(node, nick: str, args: list, reply_target: str):
+    """Consume an item for a boost."""
+    if not args:
+        await node.send(f"PRIVMSG {reply_target} :Usage: {node.prefix} use <item_name>")
+        return
+    
+    item_name = " ".join(args)
+    # This would typically be in economy_repo or player_repo
+    # For now, let's implement the specific Phase 4 boosts
+    result, msg = await node.db.use_item(nick, node.net_name, item_name)
+    banner = format_text(msg, C_GREEN if result else C_RED)
+    await node.send(f"PRIVMSG {reply_target} :{build_banner(banner)}")
+
+# --- PHASE 5: GLOBAL ECONOMY & MINI-GAMES ---
+
+async def handle_auction(node, nick: str, args: list, reply_target: str):
+    """DarkNet Auction sub-commands: list, sell, bid."""
+    if not args:
+        await node.send(f"PRIVMSG {reply_target} :Usage: {node.prefix} auction <list|sell|bid>")
+        return
+    
+    sub = args[0].lower()
+    if sub == "list":
+        listings = await node.db.list_active_auctions()
+        if not listings:
+            await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[DARKNET] The auction house is currently empty.', C_CYAN))}")
+            return
+        
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ GLOBAL DARKNET AUCTIONS ]', C_CYAN, True))}")
+        for l in listings:
+            line = f"#{l['id']} | {l['item']} | Seller: {l['seller']} | Bid: {l['current_bid']}c | {l['high_bidder']} | Ends: {l['ends_in_min']}m"
+            await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(line, C_GREEN))}")
+            
+    elif sub == "sell" and len(args) >= 3:
+        # !a auction sell <item> <start_bid>
+        item_name = args[1]
+        try: start_bid = int(args[2])
+        except: start_bid = 100
+        
+        success, msg = await node.db.create_auction(nick, node.net_name, item_name, start_bid, 1440)
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
+        
+    elif sub == "bid" and len(args) >= 3:
+        # !a auction bid <id> <amount>
+        try:
+            aid = int(args[1])
+            amt = int(args[2])
+        except:
+            await node.send(f"PRIVMSG {reply_target} :Usage: {node.prefix} auction bid <id> <amount>")
+            return
+            
+        success, msg = await node.db.bid_on_auction(nick, node.net_name, aid, amt)
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
+    else:
+        await node.send(f"PRIVMSG {reply_target} :Invalid auction command. Try: list, sell <item> <bid>, or bid <id> <amount>.")
+
+async def handle_dice_roll(node, nick: str, args: list, reply_target: str):
+    """Play a game of 2d6 dice."""
+    if len(args) < 2:
+        await node.send(f"PRIVMSG {reply_target} :Usage: {node.prefix} dice <bet> <high|low|seven>")
+        return
+    
+    try: bet = int(args[0])
+    except: bet = 0
+    choice = args[1].lower()
+    
+    if choice not in ["high", "low", "seven"]:
+        await node.send(f"PRIVMSG {reply_target} :Choice must be high (8-12), low (2-6), or seven.")
+        return
+
+    result = await node.db.roll_dice(nick, node.net_name, bet, choice)
+    if "error" in result:
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(result['error'], C_RED))}")
+    else:
+        banner = format_text(result['msg'], C_GREEN if result['win'] else C_YELLOW)
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(banner)}")
+
+async def handle_cipher_start(node, nick: str, reply_target: str):
+    """Start a CipherLock session."""
+    result = await node.db.start_cipher(nick, node.net_name)
+    if "error" in result:
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(result['error'], C_RED))}")
+    else:
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(result['msg'], C_YELLOW))}")
+
+async def handle_guess(node, nick: str, args: list, reply_target: str):
+    """Submit a CipherLock guess."""
+    if not args:
+        await node.send(f"PRIVMSG {reply_target} :Usage: {node.prefix} guess <4-digit-sequence>")
+        return
+        
+    result = await node.db.guess_cipher(nick, node.net_name, args[0])
+    if "error" in result:
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(result['error'], C_RED))}")
+    else:
+        color = C_GREEN if result.get('complete') and result.get('success') else C_YELLOW
+        if result.get('complete') and not result.get('success'): color = C_RED
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(result['msg'], color))}")
+
+async def handle_market_view(node, nickname: str, reply_target: str):
+    """View current global market multipliers."""
+    status = await node.db.get_market_status()
+    if not status:
+        await node.send(f"PRIVMSG {reply_target} :[MARKET] Market is currently stable (1.0x baseline).")
+        return
+        
+    await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ GLOBAL MARKET CONDITIONS ]', C_CYAN, True))}")
+    for itype, mult in status.items():
+        trend = "↑ INFLATION" if mult > 1.0 else ("↓ DEFLATION" if mult < 1.0 else "→ STABLE")
+        color = C_RED if mult > 1.0 else (C_GREEN if mult < 1.0 else C_YELLOW)
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'{itype.upper()}: {mult:.2f}x | {trend}', color))}")
+
+async def handle_leaderboard(node, nick: str, args: list, reply_target: str):
+    """Show global high scores."""
+    cat = args[0].upper() if args else "DICE"
+    results = await node.db.get_leaderboard(cat)
+    if not results:
+        await node.send(f"PRIVMSG {reply_target} :[GRID] No records found for category: {cat}")
+        return
+    
+    await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'[ LEADERBOARD: {cat} ]', C_CYAN, True))}")
+    for i, r in enumerate(results):
+        line = f"#{i+1} | {r['name']} | score: {r['score']:.1f}"
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(line, C_GREEN))}")
+
+# --- PHASE 6: SYNDICATE & MAP ---
+
+async def handle_syndicate_cmd(node, nick: str, args: list, reply_target: str):
+    """Syndicate management: create, join, store, draw, info, list."""
+    if not args:
+        await node.send(f"PRIVMSG {reply_target} :Usage: {node.prefix} syndicate <create|join|store|draw|info|list>")
+        return
+        
+    sub = args[0].lower()
+    if sub == "create" and len(args) >= 2:
+        success, msg = await node.db.create_syndicate(nick, node.net_name, args[1])
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
+    elif sub == "join" and len(args) >= 2:
+        success, msg = await node.db.join_syndicate(nick, node.net_name, args[1])
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
+    elif sub == "store" and len(args) >= 2:
+        try: amt = float(args[1])
+        except: amt = 0
+        success, msg = await node.db.store_power(nick, node.net_name, amt)
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
+    elif sub == "draw" and len(args) >= 2:
+        try: amt = float(args[1])
+        except: amt = 0
+        success, msg = await node.db.draw_power(nick, node.net_name, amt)
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_GREEN if success else C_RED))}")
+    elif sub == "info":
+        data = await node.db.get_syndicate_info(nick, node.net_name)
+        if "error" in data:
+            await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(data['error'], C_RED))}")
+            return
+        
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ SYNDICATE: ' + data['name'] + ' ]', C_CYAN, True))}")
+        stats = f"Power: {data['power']:.1f}/{data['max_power']}u | Treasury: {data['credits']}c | Members: {data['member_count']}"
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(stats, C_YELLOW))}")
+        m_list = ", ".join([f"{m['name']}(LV{m['rank']})" for m in data['members'][:10]])
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'Roster: {m_list}', C_WHITE))}")
+    elif sub == "list":
+        syns = await node.db.list_syndicates()
+        if not syns:
+            await node.send(f"PRIVMSG {reply_target} :No Syndicates found in this grid sector.")
+            return
+        
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ ACTIVE SYNDICATES ]', C_CYAN, True))}")
+        for s in syns:
+            line = f"[{s['name']}] - Members: {s['members']} | Power: {s['power']:.1f}u"
+            await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(line, C_GREEN))}")
+    else:
+        await node.send(f"PRIVMSG {reply_target} :Sub-command '{sub}' not recognized.")
+
+async def handle_grid_map(node, nick: str, reply_target: str):
+    """Render the ASCII grid map."""
+    async with node.db.async_session() as session:
+        # Get character for stats
+        char = await node.db.get_character_by_nick(nick, node.net_name, session)
+        if not char:
+            await node.send(f"PRIVMSG {reply_target} :[ERR] Persona offline.")
+            return
+        
+        # Calculate radius: (SEC + ALG) / 10
+        radius = max(1, int((char.sec + char.alg) / 10))
+        # Bonus for items? (Handled in radius calculation if needed)
+        
+        map_text = await generate_ascii_map(session, char, radius)
+        
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ TERMINAL NODAL TOPOLOGY ]', C_CYAN, True))}")
+        for line in map_text.split("\n"):
+            await node.send(f"PRIVMSG {reply_target} :{build_banner(line)}")
+
+async def handle_grid_loot(node, nick: str, reply_target: str):
+    if not await check_rate_limit(node, nick, reply_target, cooldown=60): return
+    result = await node.db.raid_node(nick, node.net_name)
+    
+    banner = format_text(result['msg'], C_GREEN if result['success'] else C_RED)
+    await node.send(f"PRIVMSG {reply_target} :{build_banner(banner)}")
+    
+    if result['success']:
+        await node.send(f"PRIVMSG {node.config['channel']} :{build_banner(format_text(result['sigact'], C_YELLOW, True))}")
+
+async def handle_grid_network_msg(node, nick: str, args: list, reply_target: str):
+    if len(args) < 3:
+        await node.send(f"PRIVMSG {reply_target} :Syntax: {node.prefix} grid network msg <nick> <msg>")
+        return
+        
+    target_nick = args[1]
+    message = " ".join(args[2:])
+    
+    loc = await node.db.get_location(nick, node.net_name)
+    if not loc or not loc.get('irc_affinity'):
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('System Error: This node lacks a synchronized IRC bridge.', C_RED))}")
+        return
+        
+    target_net = loc['irc_affinity']
+    # Format the message to include the sender's origin
+    formatted_msg = format_text(f"[CROSS-GRID] <{nick}@{node.net_name}> {message}", C_CYAN)
+    
+    success = await node.hub.relay_message(target_net, target_nick, formatted_msg)
+    if success:
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'Packet successfully relayed to {target_net} node.', C_GREEN))}")
+    else:
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'Packet transmission failed: Network {target_net} is currently unreachable.', C_RED))}")
+
 async def handle_merchant_tx(node, nickname: str, verb: str, item_name: str, reply_target: str):
     result, msg = await node.db.process_transaction(nickname, node.net_name, verb, item_name)
     banner = format_text(msg, C_GREEN if result else C_RED)
@@ -172,6 +488,13 @@ async def handle_grid_view(node, nickname: str, reply_target: str):
     await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(loc['description'], C_YELLOW))}")
     node_stats = f"Type: {loc['type'].upper()} | Level: {loc['level']} | Credits: {loc['credits']}c"
     await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(node_stats, C_GREEN))}")
+    
+    # Phase 3: Metadata display
+    meta_str = f"Integrity: {loc.get('visibility_mode', 'OPEN')}"
+    if loc.get('visibility_mode') == 'OPEN' and loc.get('irc_affinity'):
+        meta_str += f" | Network: {loc['irc_affinity'].upper()}"
+    await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(meta_str, C_CYAN))}")
+
     await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'Exits: {exits_str}', C_CYAN))}")
     action_prompt = format_text(f"[GRID] {nickname} @ {loc['name']} | Use '{node.prefix} move <dir>' to travel.", C_YELLOW)
     if loc['type'] == 'arena': action_prompt += format_text(f" | Use '{node.prefix} queue' to enter the Arena.", C_GREEN)

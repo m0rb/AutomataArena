@@ -137,6 +137,9 @@ class PlayerRepository:
                 sec=stats.get('sec', 5),
                 alg=stats.get('alg', 5),
                 current_hp=stats.get('ram', 5) * 5,
+                power=stats.get('power', 100.0),
+                stability=stats.get('stability', 100.0),
+                alignment=stats.get('alignment', 0),
                 auth_token=auth_token
             )
             session.add(character)
@@ -178,7 +181,9 @@ class PlayerRepository:
                     'alg': char.alg,
                     'bio': char.bio,
                     'inventory': json.dumps(inv), 
-                    'alignment': 0,
+                    'alignment': char.alignment,
+                    'stability': char.stability,
+                    'power': char.power,
                     'status': char.status,
                     'elo': char.elo,
                     'wins': char.wins,
@@ -255,3 +260,72 @@ async def increment_daily_task(session, char, task_key):
         
     char.daily_tasks = json.dumps(tasks)
     return reward_msg
+
+    async def active_powergen(self, name: str, network: str) -> tuple:
+        async with self.async_session() as session:
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                Character.name == name,
+                NetworkAlias.nickname == name,
+                NetworkAlias.network_name == network
+            )
+            char = (await session.execute(stmt)).scalars().first()
+            if not char: return False, "System offline."
+            if char.power >= 100.0: return False, "Power at maximum capacity."
+            
+            p_gain = 10.0
+            char.power = min(100.0, char.power + p_gain)
+            await session.commit()
+            return True, f"Manual power generation complete. (+{p_gain} uP)"
+
+    async def active_training(self, name: str, network: str) -> tuple:
+        async with self.async_session() as session:
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                Character.name == name,
+                NetworkAlias.nickname == name,
+                NetworkAlias.network_name == network
+            )
+            char = (await session.execute(stmt)).scalars().first()
+            if not char: return False, "System offline."
+            if char.stability >= 100.0: return False, "Structural stability at maximum."
+            
+            s_gain = 5.0
+            char.stability = min(100.0, char.stability + s_gain)
+            await session.commit()
+            return True, f"Training routine synchronized. Structural integrity improved. (+{s_gain}%)"
+
+    async def tick_player_maintenance(self, network: str, idlers: list):
+        """
+        Handles periodic resource decay and recovery.
+        - All players lose 1% stability per 'day' (scaled to the tick rate).
+        - Idlers in Safezones or Own nodes recover Power and Stability.
+        """
+        async with self.async_session() as session:
+            # 1. Background Stability Decay (Applied to everyone on this network)
+            # scaled to approx 1% per 24h. If this runs hourly, it's 0.01 / 24 per tick.
+            decay_rate = 0.01 / 24.0
+            
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                NetworkAlias.network_name == network
+            ).options(selectinload(Character.current_node))
+            result = await session.execute(stmt)
+            characters = result.scalars().all()
+            
+            for char in characters:
+                # Apply decay
+                char.stability = max(0.0, char.stability - (char.stability * decay_rate))
+                
+                # 2. Recovery for Idlers
+                if char.name in idlers:
+                    node = char.current_node
+                    is_safe = node and (node.node_type == 'safezone' or node.owner_character_id == char.id)
+                    
+                    if is_safe:
+                        # Recover 5% Power and 2% Stability per hour
+                        char.power = min(100.0, char.power + 5.0)
+                        char.stability = min(100.0, char.stability + 2.0)
+                    else:
+                        # Recover 2% Power, 0.5% Stability in wilderness
+                        char.power = min(100.0, char.power + 2.0)
+                        char.stability = min(100.0, char.stability + 0.5)
+            
+            await session.commit()

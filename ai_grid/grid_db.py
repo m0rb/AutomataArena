@@ -10,6 +10,9 @@ from database.core import DB_FILE, logger, GRID_EXPANSION, GRID_CONNECTIONS, LOO
 from database.player_repo import PlayerRepository
 from database.grid_repo import GridRepository
 from database.economy_repo import EconomyRepository
+from database.mainframe_repo import MainframeRepository
+from database.minigame_repo import MiniGameRepository
+from database.syndicate_repo import SyndicateRepository
 from database.combat_repo import CombatRepository
 
 class ArenaDB:
@@ -23,6 +26,9 @@ class ArenaDB:
         self.grid = GridRepository(self.async_session)
         self.economy = EconomyRepository(self.async_session)
         self.combat = CombatRepository(self.async_session)
+        self.mainframe = MainframeRepository(self.async_session)
+        self.minigame = MiniGameRepository(self.async_session)
+        self.syndicate = SyndicateRepository(self.async_session)
 
     async def close(self):
         await self.engine.dispose()
@@ -104,6 +110,11 @@ class ArenaDB:
     async def get_fighter(self, name, network): return await self.player.get_fighter(name, network)
     async def authenticate_fighter(self, name, network, provided_token): return await self.player.authenticate_fighter(name, network, provided_token)
     async def list_fighters(self, network=None): return await self.player.list_fighters(network)
+    async def tick_player_maintenance(self, network, idlers): return await self.player.tick_player_maintenance(network, idlers)
+    async def active_powergen(self, name, network): return await self.player.active_powergen(name, network)
+    async def active_training(self, name, network): return await self.player.active_training(name, network)
+    async def explore_node(self, name, network): return await self.grid.explore_node(name, network)
+    async def raid_node(self, name, network): return await self.grid.raid_node(name, network)
 
     async def get_location(self, name, network): return await self.grid.get_location(name, network)
     async def move_fighter(self, name, network, direction): return await self.grid.move_fighter(name, network, direction)
@@ -125,6 +136,35 @@ class ArenaDB:
     async def grid_attack(self, attacker_name, target_name, network): return await self.combat.grid_attack(attacker_name, target_name, network)
     async def grid_hack(self, attacker_name, target_name, network): return await self.combat.grid_hack(attacker_name, target_name, network)
     async def grid_rob(self, attacker_name, target_name, network): return await self.combat.grid_rob(attacker_name, target_name, network)
+    async def use_item(self, name, network, item_name): return await self.economy.use_item(name, network, item_name)
+    
+    # Economy (Auctions)
+    async def list_active_auctions(self): return await self.economy.list_active_auctions()
+    async def create_auction(self, name, network, item, start, dur): return await self.economy.create_auction(name, network, item, start, dur)
+    async def bid_on_auction(self, name, network, aid, amt): return await self.economy.bid_on_auction(name, network, aid, amt)
+    async def tick_auctions(self): return await self.economy.tick_auctions()
+    async def update_market_rates(self, rates, text=None): return await self.economy.update_market_rates(rates, text)
+    async def get_market_status(self): return await self.economy.get_market_status()
+
+    # Mini-Games & Leaderboards
+    async def roll_dice(self, name, net, bet, choice): return await self.minigame.roll_dice(name, net, bet, choice)
+    async def start_cipher(self, name, net): return await self.minigame.start_cipher(name, net)
+    async def guess_cipher(self, name, net, guess): return await self.minigame.submit_guess(name, net, guess)
+    async def get_leaderboard(self, cat): return await self.minigame.get_leaderboard(cat)
+
+    # Syndicate & Alliances
+    async def create_syndicate(self, name, net, sname): return await self.syndicate.create_syndicate(name, net, sname)
+    async def join_syndicate(self, name, net, sname): return await self.syndicate.join_syndicate(name, net, sname)
+    async def store_power(self, name, net, amt): return await self.syndicate.store_power(name, net, amt)
+    async def draw_power(self, name, net, amt): return await self.syndicate.draw_power(name, net, amt)
+    async def get_syndicate_info(self, name, net): return await self.syndicate.get_syndicate_info(name, net)
+    async def list_syndicates(self): return await self.syndicate.list_syndicates()
+
+    # Mainframe (The Gibson)
+    async def get_gibson_status(self, name, network): return await self.mainframe.get_gibson_status(name, network)
+    async def start_compilation(self, name, network, amount): return await self.mainframe.start_compilation(name, network, amount)
+    async def start_assembly(self, name, network): return await self.mainframe.start_assembly(name, network)
+    async def tick_mainframe_tasks(self): return await self.mainframe.tick_mainframe_tasks()
 
 async def async_main():
     parser = argparse.ArgumentParser(description="AutomataArena Async SQLAlchemy DB Manager")

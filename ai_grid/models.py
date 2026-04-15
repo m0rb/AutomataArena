@@ -14,7 +14,7 @@ class GridNode(Base):
     name = Column(String, nullable=False, unique=True)
     description = Column(String)
     node_type = Column(String, default="wilderness")  # wilderness, arena, merchant, safezone
-    owner_alliance_id = Column(Integer, nullable=True) # For Territory Control
+    owner_alliance_id = Column(Integer, ForeignKey('syndicates.id', use_alter=True, name="fk_grid_alliance"), nullable=True) # For Territory Control
     owner_character_id = Column(Integer, ForeignKey('characters.id', use_alter=True, name="fk_grid_owner"), nullable=True)
     upgrade_level = Column(Integer, default=1)
     
@@ -23,6 +23,11 @@ class GridNode(Base):
     power_generated = Column(Float, default=0.0)
     durability = Column(Float, default=100.0)
     threat_level = Column(Integer, default=0)  # 0=safe, 1-3=wilderness mob tier
+    
+    # Discovery & Network Mapping
+    is_hidden = Column(Boolean, default=False)
+    visibility_mode = Column(String, default='OPEN') # OPEN, CLOSED
+    irc_affinity = Column(String, nullable=True) # Mapping to IRC Network (e.g. Rizon)
     
     # Relationships
     owner = relationship("Character", foreign_keys=[owner_character_id])
@@ -37,6 +42,7 @@ class NodeConnection(Base):
     source_node_id = Column(Integer, ForeignKey('grid_nodes.id'))
     target_node_id = Column(Integer, ForeignKey('grid_nodes.id'))
     direction = Column(String) # e.g., 'north', 'port_80', 'ssh_tunnel'
+    is_hidden = Column(Boolean, default=False)
     
     source_node = relationship("GridNode", foreign_keys=[source_node_id], back_populates="exits")
     target_node = relationship("GridNode", foreign_keys=[target_node_id])
@@ -97,6 +103,16 @@ class Character(Base):
     sec = Column(Integer, default=5) # Defense/Resist
     alg = Column(Integer, default=5) # Magic/Hacking capability
     
+    # Resource Stats
+    power = Column(Float, default=100.0)
+    stability = Column(Float, default=100.0)
+    alignment = Column(Integer, default=0) # Ethics: -100 to 100
+    data_units = Column(Float, default=0.0) # Raw fodder for The Gibson
+    alg_bonus = Column(Integer, default=0) # Temporary boost for next hack
+    ice_lockdown_until = Column(DateTime, nullable=True) # CipherLock penalty
+    
+    syndicate_id = Column(Integer, ForeignKey('syndicates.id'), nullable=True)
+    
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     # Relationships
@@ -127,3 +143,99 @@ class InventoryItem(Base):
     
     owner = relationship("Character", back_populates="inventory")
     template = relationship("ItemTemplate")
+
+# ==========================================
+# 4. MAINFRAME MANUFACTURING (THE GIBSON)
+# ==========================================
+class MainframeTask(Base):
+    __tablename__ = 'mainframe_tasks'
+    
+    id = Column(Integer, primary_key=True)
+    character_id = Column(Integer, ForeignKey('characters.id'), nullable=False)
+    task_type = Column(String, nullable=False) # COMPILE, ASSEMBLE
+    amount = Column(Integer, default=1) # Target yield
+    completion_time = Column(DateTime, nullable=False)
+    is_collected = Column(Boolean, default=False)
+    
+    owner = relationship("Character")
+
+# ==========================================
+# 5. GLOBAL ECONOMY & MINI-GAMES
+# ==========================================
+class AuctionListing(Base):
+    __tablename__ = 'auction_listings'
+    
+    id = Column(Integer, primary_key=True)
+    seller_id = Column(Integer, ForeignKey('characters.id'), nullable=False)
+    item_id = Column(Integer, ForeignKey('inventory_items.id'), nullable=False)
+    current_bid = Column(Integer, default=0)
+    highest_bidder_id = Column(Integer, ForeignKey('characters.id'), nullable=True)
+    end_time = Column(DateTime, nullable=False)
+    is_active = Column(Boolean, default=True)
+    
+    seller = relationship("Character", foreign_keys=[seller_id])
+    highest_bidder = relationship("Character", foreign_keys=[highest_bidder_id])
+    item = relationship("InventoryItem")
+
+class Leaderboard(Base):
+    __tablename__ = 'leaderboards'
+    
+    id = Column(Integer, primary_key=True)
+    category = Column(String, nullable=False) # DICE, ARENA, GIBSON, WEALTH
+    character_id = Column(Integer, ForeignKey('characters.id'), nullable=False)
+    score = Column(Float, default=0.0)
+    
+    character = relationship("Character")
+
+class CipherSession(Base):
+    __tablename__ = 'cipher_sessions'
+    
+    id = Column(Integer, primary_key=True)
+    character_id = Column(Integer, ForeignKey('characters.id'), nullable=False)
+    target_sequence = Column(String, nullable=False)
+    attempts_remaining = Column(Integer, default=5)
+    node_id = Column(Integer, ForeignKey('grid_nodes.id'), nullable=False)
+    is_active = Column(Boolean, default=True)
+    
+    character = relationship("Character")
+    node = relationship("GridNode")
+
+class GlobalMarket(Base):
+    __tablename__ = 'global_market'
+    
+    id = Column(Integer, primary_key=True)
+    item_type = Column(String, nullable=False) # junk, hack, weapon, gear
+    multiplier = Column(Float, default=1.0)
+    last_event = Column(String) # For flavor news
+
+# ==========================================
+# 6. SYNDICATES & ALLIANCES
+# ==========================================
+class Syndicate(Base):
+    __tablename__ = 'syndicates'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)
+    description = Column(String)
+    founder_id = Column(Integer, ForeignKey('characters.id', use_alter=True, name="fk_syn_founder"))
+    
+    credits = Column(Float, default=0.0)
+    power_stored = Column(Float, default=0.0)
+    max_power = Column(Float, default=10000.0)
+    
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    members = relationship("SyndicateMember", back_populates="syndicate")
+
+class SyndicateMember(Base):
+    __tablename__ = 'syndicate_members'
+    
+    id = Column(Integer, primary_key=True)
+    syndicate_id = Column(Integer, ForeignKey('syndicates.id'))
+    character_id = Column(Integer, ForeignKey('characters.id'))
+    rank = Column(Integer, default=0) # 0=Initiate, 1=Member, 2=Admin, 3=Founder
+    daily_power_withdrawn = Column(Float, default=0.0)
+    last_draw_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    syndicate = relationship("Syndicate", back_populates="members")
+    character = relationship("Character")

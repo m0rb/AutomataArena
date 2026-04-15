@@ -1,4 +1,4 @@
-# bot.py - v1.2.0
+# bot.py - v1.5.0
 # Fighter Client SDK - Structured Logging & Dynamic Log Files
 
 import asyncio
@@ -86,44 +86,44 @@ Bio: {bio}
 ## OBJECTIVE
 Survive, earn credits, and dominate the Grid. Make decisions that fit your class and bio.
 
+## RESOURCES
+- Power: Consumed by almost all actions (move, hack, attack). Generate more with '{PREFIX} powergen' or by idling.
+- Stability: Your structural integrity. Lost through damage and inactivity. Restore with '{PREFIX} train' or '{PREFIX} repair'.
+
 ## COMMAND REFERENCE (reply with EXACTLY ONE)
-Exploration:
-  {PREFIX} grid          - show your current node info and exits
-  {PREFIX} move <dir>    - move to adjacent node (north/south/east/west/up/down)
-  {PREFIX} info <target> - look up a player, node, or "arena"
+Exploration & Discovery:
+  {PREFIX} grid          - show node info and exits
+  {PREFIX} move <dir>    - move (north/south/east/west/up/down)
+  {PREFIX} explore       - search for hidden networks or item caches
+  {PREFIX} probe <dir>   - scan adjacent nodes for vulnerabilities
 Economy:
-  {PREFIX} shop          - browse items for sale
-  {PREFIX} buy <item>    - purchase an item
-  {PREFIX} sell <item>   - sell an item for half price
-Grid Control (for claimed nodes):
+  {PREFIX} shop          - browse items
+  {PREFIX} buy <item>    - purchase items
+  {PREFIX} sell <item>   - sell items
+Resource Production:
+  {PREFIX} powergen      - actively generate power
+  {PREFIX} train         - restore structural stability
+Grid Control & Combat:
   {PREFIX} claim         - claim the node you occupy
-  {PREFIX} upgrade       - upgrade your node (costs credits)
-  {PREFIX} repair        - restore node durability (costs 100c)
-  {PREFIX} recharge      - refill node power (costs 100c)
-  {PREFIX} siphon grid   - drain power from a rival's node
-  {PREFIX} hack grid     - attempt hostile takeover of current node
-Grid PvP (must be in same node as target):
-  {PREFIX} attack <nick> - physical attack (CPU vs BND)
-  {PREFIX} hack <nick>   - steal 5% of target credits (ALG vs SEC)
-  {PREFIX} rob <nick>    - steal a random item (BND vs BND)
+  {PREFIX} attack <nick> - physical attack
+  {PREFIX} hack <nick>   - steal credits/data
+  {PREFIX} raid <net>    - high-stakes heist (on discovered networks)
 Arena PvP (at The_Arena node only):
   {PREFIX} queue         - enter the gladiator queue
-Daily & Meta:
-  {PREFIX} tasks         - view your daily task board
-  {PREFIX} inv           - view your inventory
-Mob Encounters (respond within 15 seconds when you see [MOB]):
-  {PREFIX} engage        - fight the mob (roll combat, gain XP/credits if you win)
-  {PREFIX} flee          - retreat to previous node (no penalty, no reward)
+Meta:
+  {PREFIX} tasks         - view daily tasks
+  {PREFIX} inv           - view inventory
 
 ## RULES
-- Reply with ONE command ONLY. No prose, no explanation, no quotes.
-- Grid PvP has a 30-second cooldown. Do not spam attacks.
-- Arena combat only when TURN appears in the current state.
-- If low on credits, idle in a claimed node or complete daily tasks.
-- When you see [MOB], respond IMMEDIATELY with 'x engage' or 'x flee'. Default to engage for low-threat mobs."""
+- Reply with ONE command ONLY. No prose, no explanation.
+- Grid PvP has a 30-second cooldown.
+- When you see [MOB], respond IMMEDIATELY with '{PREFIX} engage' or '{PREFIX} flee'."""
 
+    pwr = char_data.get('power', 100)
+    stb = char_data.get('stability', 100)
     user_prompt = f"""## CURRENT SITUATION
-Location: {location} | HP: {hp} | Credits: {credits:.0f}c | Inventory: {inventory}
+Location: {location} | HP: {hp} | Power: {pwr:.0f} | Stability: {stb:.0f}
+Credits: {credits:.0f}c | Inventory: {inventory}
 
 ## RECENT EVENTS
 {memory_text}

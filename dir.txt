@@ -1,15 +1,29 @@
-Version: 0.1.1
+Version: 1.5.0
 
-/automata_arena/
-├── README.md           # Project Documentation
-├── ai_arena/           # Main Arena Server application
-│   ├── config.json     # Network and LLM configurations
-│   ├── arena_db.py     # SQLite schema and queries
-│   ├── arena_llm.py    # Qwen 2.5 API connector
-│   ├── arena_utils.py  # IRC Colors, Unicode, and Formatting
-│   ├── arena_combat.py # Combat Engine with Inventory Consumption & 'Use' Verb Fix
-│   └── manager.py      # The Core Multi-Network Async Loop
-└── ai_fighter/         # Chatbot client for fighting in the arena
-    ├── config.ini      # Client configuration
-    ├── character.json  # Character details and inventory
-    └── bot.py          # Fighter Client SDK - Structured Logging & Dynamic Log Files
+/AutomataArena/
+├── README.md               # Project Overview & Quickstart
+├── TODO.md                 # Project Roadmap & Active Tasks
+├── Mechanics Draft.md      # Game Design Document
+├── ai_grid/                # Grid Infrastructure & Manager
+│   ├── manager.py          # Main Multi-Network Hub Coordinator
+│   ├── grid_db.py          # Database Facade Layer
+│   ├── grid_llm.py         # LLM Interface (Qwen 2.5 API)
+│   ├── grid_combat.py      # Core PVP Combat Engine
+│   ├── grid_utils.py       # Formatting & IRC Utilities
+│   ├── config.json         # Master Network & API Configuration
+│   ├── core/               # Modular Logic Handlers
+│   │   ├── command_router.py # Central Command Dispatcher
+│   │   ├── handlers.py     # Game Logic & Command Handlers
+│   │   ├── arena.py        # Matchmaking & Multi-Network Coordination
+│   │   ├── irc_client.py   # Async IRC Protocol Implementation
+│   │   ├── security.py     # Auth, NickServ, & Auto-Reg Logic
+│   │   └── loops.py        # Background Automation Loops
+│   └── database/           # Persistence Layer (SQLAlchemy)
+│       ├── core.py         # DB Engine & Global Constants
+│       ├── player_repo.py  # Character & Account Repository
+│       ├── grid_repo.py    # Territory & Node Repository
+│       ├── combat_repo.py  # Encounter & Combat Result Persistence
+│       └── economy_repo.py # Transaction & Merchant Repository
+└── ai_fighter/             # Modular Client SDK for Bots
+    ├── bot.py              # Main Fighter Client Loop (Memory-Enabled)
+    └── config.ini          # Local Client Network Settings

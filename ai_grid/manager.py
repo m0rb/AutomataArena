@@ -75,6 +75,10 @@ class GridNode:
         asyncio.create_task(loops.arena_call_loop(self))
         asyncio.create_task(loops.idle_payout_loop(self))
         asyncio.create_task(loops.power_tick_loop(self))
+        asyncio.create_task(loops.mainframe_loop(self))
+        asyncio.create_task(loops.auction_loop(self))
+        asyncio.create_task(loops.economic_ticker_loop(self))
+        asyncio.create_task(loops.hype_drop_loop(self))
         await self.db.seed_grid_expansion()
         await self.listen_loop()
 
@@ -146,19 +150,15 @@ class GridNode:
                 elif command in ["PART", "QUIT"]:
                     self.channel_users.pop(source_nick.lower(), None)
                 elif command == "PRIVMSG":
-                    is_channel_msg = target.startswith(('#', '&', '+', '!'))
-                    reply_target = target if is_channel_msg else source_nick
-                    if is_channel_msg:
-                        import time
+                    if target.lower() == self.config['channel'].lower():
+                        self.hype_counter += 1
                         nick_lower = source_nick.lower()
-                        if nick_lower not in self.channel_users:
-                            self.channel_users[nick_lower] = {'join_time': time.time(), 'chat_lines': 1}
-                            security.start_registration_timer(self, nick_lower)
-                        else:
+                        if nick_lower in self.channel_users:
                             self.channel_users[nick_lower]['chat_lines'] += 1
                     
-                    is_admin = source_nick.lower() in self.admins
-                    asyncio.create_task(self.router.dispatch(source_nick, command, target, msg, is_admin))
+                    if msg.startswith(self.prefix):
+                        is_admin = source_nick.lower() in self.admins
+                        asyncio.create_task(self.router.dispatch(source_nick, command, target, msg, is_admin))
 
             except Exception as e:
                 logger.exception(f"Core Loop Error: {e}")
@@ -182,6 +182,24 @@ class MasterHub:
                 asyncio.create_task(node.connect())
         logger.info(f"Hub initialized. Bridging {len(self.nodes)} networks...")
         while True: await asyncio.sleep(3600)
+
+    async def relay_message(self, target_net: str, target_nick: str, message: str) -> bool:
+        """Relays a message to a specific target on a different network."""
+        node = self.nodes.get(target_net.lower())
+        if node:
+            await node.send(f"PRIVMSG {target_nick} :{message}")
+            return True
+        return False
+
+    async def send_memo(self, target_net: str, target_nick: str, message: str) -> bool:
+        """Sends a memo via MemoServ to the target network."""
+        node = self.nodes.get(target_net.lower())
+        if node:
+            # Traditional IRC service command
+            await node.send(f"PRIVMSG MemoServ :SEND {target_nick} {message}")
+            return True
+        return False
+
     def shutdown(self):
         logger.warning("Shutting down...")
         asyncio.create_task(self.db.close())

@@ -85,9 +85,121 @@ async def idle_payout_loop(node):
                     node.channel_users[nick]['chat_lines'] = 0
             
             if payouts:
+                idlers = list(payouts.keys())
                 await node.db.award_credits_bulk(payouts, node.net_name)
-                await node.send(f"PRIVMSG {node.config['channel']} :{build_banner(format_text('[ECONOMY] Hourly universal basic income and network tips distributed.', C_GREEN))}")
+                await node.db.tick_player_maintenance(node.net_name, idlers)
+                await node.send(f"PRIVMSG {node.config['channel']} :{build_banner(format_text('[ECONOMY] Hourly rewards distributed. Power and Stability restabilized.', C_GREEN))}")
         except asyncio.CancelledError:
             break
         except Exception as e:
             logger.error(f"Payout loop error on {node.net_name}: {e}")
+
+async def mainframe_loop(node):
+    """Processes background Gibson tasks and MemoServ notifications."""
+    await asyncio.sleep(45)
+    while True:
+        try:
+            await asyncio.sleep(60) # Process every minute
+            notifications = await node.db.tick_mainframe_tasks()
+            
+            for note in notifications:
+                # We only process notes for the current network in this loop instance
+                if note['network'].lower() == node.net_name.lower():
+                    # Channel Alert
+                    alert = format_text(f"[MAINFRAME] Signal for {note['nickname']}: {note['msg']}", C_CYAN)
+                    await node.send(f"PRIVMSG {node.config['channel']} :{build_banner(alert)}")
+                    
+                    # MemoServ Integration (Global)
+                    if CONFIG.get('mechanics', {}).get('mainframe', {}).get('memoserv_enabled', True):
+                        await node.hub.send_memo(note['network'], note['nickname'], note['msg'])
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Mainframe loop error on {node.net_name}: {e}")
+
+async def auction_loop(node):
+    """Checks for expired DarkNet auctions and processes fulfillment."""
+    await asyncio.sleep(30)
+    while True:
+        try:
+            await asyncio.sleep(60) # Tick every minute
+            notifications = await node.db.tick_auctions()
+            
+            for note in notifications:
+                # MemoServ Integration (Global)
+                if CONFIG.get('mechanics', {}).get('mainframe', {}).get('memoserv_enabled', True):
+                    await node.hub.send_memo(note['network'], note['nickname'], note['msg'])
+                
+                # If the recipient is currently on THIS network, give them a live alert too
+                if note['network'].lower() == node.net_name.lower():
+                    alert = format_text(f"[DARKNET] {note['msg']}", C_YELLOW)
+                    await node.send(f"PRIVMSG {note['nickname']} :{build_banner(alert)}")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Auction loop error on {node.net_name}: {e}")
+
+async def economic_ticker_loop(node):
+    """LLM-driven market fluctuations every 60 minutes."""
+    await asyncio.sleep(15) # Stagger start
+    while True:
+        try:
+            # Generate Market News via LLM
+            news_text = await node.hub.llm.generate_market_news()
+            
+            # Simple heuristic to extract multipliers from LLM output or just random-walk
+            # For robustness, we'll use a random walk with LLM flavor text
+            multipliers = {
+                "junk": round(random.uniform(0.8, 1.5), 2),
+                "hack": round(random.uniform(0.9, 1.3), 2),
+                "weapon": round(random.uniform(0.9, 1.2), 2),
+                "gear": round(random.uniform(0.9, 1.1), 2)
+            }
+            
+            await node.db.update_market_rates(multipliers, news_text)
+            
+            # Broadcast news to the channel
+            banner = format_text("[MARKET TICKER] " + news_text, C_CYAN)
+            await node.send(f"PRIVMSG {node.config['channel']} :{build_banner(banner)}")
+            
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Economic ticker error: {e}")
+            await asyncio.sleep(300)
+
+async def hype_drop_loop(node):
+    """Rewards active spectators during chat volume spikes."""
+    await asyncio.sleep(60)
+    while True:
+        try:
+            await asyncio.sleep(300) # Check every 5 minutes
+            threshold = 15
+            if node.hype_counter >= threshold:
+                # Find active chatters (last 5 mins)
+                # For simplicity, we filter from channel_users who have > 0 lines
+                chatters = [nick for nick, data in node.channel_users.items() if data.get('chat_lines', 0) > 0]
+                
+                if chatters:
+                    count = min(3, len(chatters))
+                    lucky = random.sample(chatters, count)
+                    
+                    for nick in lucky:
+                        # Award 100c or 5 Data
+                        reward_type = random.choice(["credits", "data"])
+                        if reward_type == "credits":
+                            await node.db.economy.award_credits(nick, node.net_name, 100)
+                        else:
+                            await node.db.economy.award_data(nick, node.net_name, 5.0)
+                        
+                        node.channel_users[nick]['chat_lines'] = 0 # Reset activity for this user
+                    
+                    msg = format_text(f"[HYPE] The Grid resonates with your energy! Rewards dropped to: {', '.join(lucky)}", C_YELLOW, bold=True)
+                    await node.send(f"PRIVMSG {node.config['channel']} :{build_banner(msg)}")
+            
+            node.hype_counter = 0 # Reset global counter
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Hype drop loop error: {e}")

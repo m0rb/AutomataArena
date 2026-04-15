@@ -35,6 +35,7 @@ MOB_ROSTER = {
     1: {"name": "Rogue_Process",  "cpu": 2, "ram": 2, "bnd": 2, "sec": 1, "alg": 1, "xp": 15, "credits": 10},
     2: {"name": "ICE_Drone",      "cpu": 3, "ram": 3, "bnd": 2, "sec": 2, "alg": 2, "xp": 25, "credits": 20},
     3: {"name": "Phantom_Script", "cpu": 4, "ram": 4, "bnd": 3, "sec": 3, "alg": 3, "xp": 40, "credits": 35},
+    0: {"name": "Grid_Bug",       "cpu": 1, "ram": 1, "bnd": 1, "sec": 1, "alg": 0, "xp": 5,  "credits": 5},
 }
 
 LOOT_TABLE = ["Data_Shard", "Memory_Fragment", "Corrupted_Bit"]

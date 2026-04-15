@@ -34,6 +34,8 @@ class CommandRouter:
                     if args: asyncio.create_task(handlers.handle_grid_movement(self.node, source_nick, args[0], reply_target))
                     else: await self.node.send(f"PRIVMSG {reply_target} :[ERR] Provide a direction.")
                 else: await self.node.send(f"PRIVMSG {reply_target} :[ERR] You are locked in combat!")
+            elif verb == "explore":
+                asyncio.create_task(handlers.handle_node_explore(self.node, source_nick, reply_target))
 
             # 3. Economy & Items
             elif verb == "shop":
@@ -43,14 +45,55 @@ class CommandRouter:
                     if len(args) >= 1: asyncio.create_task(handlers.handle_merchant_tx(self.node, source_nick, verb, " ".join(args), reply_target))
                     else: await self.node.send(f"PRIVMSG {reply_target} :[ERR] Syntax: {prefix} {verb} <item>")
                 else: await self.node.send(f"PRIVMSG {reply_target} :[ERR] Locked in combat!")
+            
+            # --- PHASE 2 RECOUP ---
+            elif verb == "powergen":
+                asyncio.create_task(handlers.handle_powergen(self.node, source_nick, reply_target))
+            elif verb == "train":
+                asyncio.create_task(handlers.handle_training(self.node, source_nick, reply_target))
 
             # 4. Grid Interaction (Claim, Upgrade, etc.)
-            elif verb in ["claim", "upgrade", "repair", "recharge"]:
-                asyncio.create_task(handlers.handle_grid_command(self.node, source_nick, reply_target, verb))
+            elif verb in ["claim", "upgrade", "repair", "recharge", "raid", "breach", "hack"]:
+                if verb in ["raid", "breach"]:
+                    asyncio.create_task(handlers.handle_grid_loot(self.node, source_nick, reply_target))
+                else:
+                    asyncio.create_task(handlers.handle_grid_command(self.node, source_nick, reply_target, verb))
             elif verb == "siphon" and len(args) > 0 and args[0].lower() == "grid":
                 asyncio.create_task(handlers.handle_grid_command(self.node, source_nick, reply_target, "siphon"))
-            elif verb == "hack" and len(args) > 0 and args[0].lower() == "grid":
-                asyncio.create_task(handlers.handle_grid_command(self.node, source_nick, reply_target, "hack"))
+            elif verb == "grid" and len(args) >= 3 and args[0].lower() == "network" and args[1].lower() == "msg":
+                # !a grid network msg <nick> <msg>
+                asyncio.create_task(handlers.handle_grid_network_msg(self.node, source_nick, args, reply_target))
+
+            # --- PHASE 4: THE GIBSON ---
+            elif verb in ["gibson", "mainframe"]:
+                asyncio.create_task(handlers.handle_gibson_status(self.node, source_nick, reply_target))
+            elif verb == "compile":
+                asyncio.create_task(handlers.handle_gibson_compile(self.node, source_nick, args, reply_target))
+            elif verb == "assemble":
+                asyncio.create_task(handlers.handle_gibson_assemble(self.node, source_nick, reply_target))
+            elif verb == "use":
+                asyncio.create_task(handlers.handle_item_use(self.node, source_nick, args, reply_target))
+
+            # --- PHASE 5: GLOBAL ECONOMY & MINI-GAMES ---
+            elif verb == "auction":
+                asyncio.create_task(handlers.handle_auction(self.node, source_nick, args, reply_target))
+            elif verb == "market":
+                asyncio.create_task(handlers.handle_market_view(self.node, source_nick, reply_target))
+            elif verb == "dice":
+                asyncio.create_task(handlers.handle_dice_roll(self.node, source_nick, args, reply_target))
+            elif verb == "cipher":
+                asyncio.create_task(handlers.handle_cipher_start(self.node, source_nick, reply_target))
+            elif verb == "guess" or (verb == "a" and len(args) > 0 and args[0] == "guess"):
+                # Handle both !a guess and potentially nested calls
+                asyncio.create_task(handlers.handle_guess(self.node, source_nick, args, reply_target))
+            elif verb in ["leaderboard", "highrollers", "top"]:
+                asyncio.create_task(handlers.handle_leaderboard(self.node, source_nick, args, reply_target))
+
+            # --- PHASE 6: SYNDICATE & MAP ---
+            elif verb in ["syndicate", "syn", "alliance"]:
+                asyncio.create_task(handlers.handle_syndicate_cmd(self.node, source_nick, args, reply_target))
+            elif verb == "map":
+                asyncio.create_task(handlers.handle_grid_map(self.node, source_nick, reply_target))
 
             # 5. Combat & Mob Encounters
             elif verb in ["attack", "hack", "rob"] and len(args) > 0 and args[0].lower() != "grid":

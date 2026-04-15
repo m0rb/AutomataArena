@@ -118,6 +118,25 @@ class ArenaLLM:
             logger.error(f"Failed to parse ambient event JSON: {e} - Raw: {raw}")
             return {"category": "STATIC", "message": "Interference detected on comms."}
 
+    async def generate_market_news(self) -> str:
+        """Generates flavor text for global market fluctuations."""
+        system = "You are a financial news bot for the cyberpunk grid."
+        prompt = "Generate a short (1-2 sentence) fictional breaking news report about the digital economy in a cyberpunk grid. Mention data shortages, silicon surpluses, or corporate hacks. No intro/outro."
+        raw = await asyncio.to_thread(self._make_request, system, prompt)
+        if raw.startswith("ERROR"):
+            return "Market static detected. Trading volumes fluctuate across the southern nodes."
+        return raw
+
+    async def generate_combat_flavor(self, exchange_data: dict) -> str:
+        """Generates a gritty 1-sentence description of a combat exchange."""
+        # exchange_data = {"attacker": "X", "defender": "Y", "dmg": 10, "type": "kinetic"}
+        system = "You are a gritty cyberpunk combat narrator."
+        prompt = f"Describe a cyberpunk combat exchange where {exchange_data['attacker']} hit {exchange_data['defender']} for {exchange_data['dmg']} {exchange_data['type']} damage. Keep it to one gritty sentence. No intro/outro."
+        try:
+            return await asyncio.to_thread(self._make_request, system, prompt)
+        except:
+            return f"{exchange_data['attacker']} scores a heavy hit on {exchange_data['defender']}."
+
     async def generate_news(self, network: str) -> str:
         logger.info(f"Requesting news broadcast for {network}")
         system = "You are the AI news anchor for the cyberpunk MUD #AutomataArena."

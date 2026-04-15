@@ -4,7 +4,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy import func
 from models import Character, Player, NetworkAlias, GridNode, InventoryItem, ItemTemplate
-from .core import logger, MOB_ROSTER, LOOT_TABLE
+from .core import logger, MOB_ROSTER, LOOT_TABLE, CONFIG
 from .player_repo import increment_daily_task
 
 class CombatRepository:
@@ -140,6 +140,12 @@ class CombatRepository:
             if not target.current_node or target.current_node.node_type == "safezone": return False, "Combat is strictly prohibited in this zone."
             if attacker.id == target.id: return False, "Self-termination is illogical."
             
+            # Phase 2: Power Consumption
+            cost = CONFIG.get('mechanics', {}).get('action_costs', {}).get('attack', 2.0)
+            if attacker.power < cost:
+                return False, f"Insufficient POWER. Need {cost:.1f} uP."
+            attacker.power -= cost
+            
             evade_roll = random.randint(1, 100)
             if evade_roll <= (target.bnd * 2):
                 return True, f"{attacker.name} swung wildly at {target.name}, but they evaded!"
@@ -149,6 +155,7 @@ class CombatRepository:
             if random.randint(1, 100) <= attacker.alg: final_dmg *= 2 
             
             target.current_hp -= final_dmg
+            target.stability = max(0.0, target.stability - (final_dmg * 0.5)) # Structural damage
             if target.current_hp <= 0:
                 looted = target.credits * 0.10
                 target.credits -= looted
@@ -180,7 +187,13 @@ class CombatRepository:
             if not attacker or not target: return False, "Target not found."
             if attacker.node_id != target.node_id: return False, "Target is not in your current sector."
             if target.current_node and target.current_node.node_type == "safezone": return False, "ICE prevents hacking in safezones."
-            if attacker.id == target.id: return False, "..."
+            if attacker.id == target.id: return "..."
+            
+            # Phase 2: Power Consumption
+            cost = CONFIG.get('mechanics', {}).get('action_costs', {}).get('hack', 3.0)
+            if attacker.power < cost:
+                return False, f"ICE trace active. You need {cost:.1f} power to safely breach."
+            attacker.power -= cost
             
             roll = random.randint(1, 20) + attacker.alg
             dc = 10 + target.sec
@@ -228,3 +241,4 @@ class CombatRepository:
                 return True, f"Sleight of hand successful! {attacker.name} lifted an item."
             else:
                 return False, f"{attacker.name} clumsily attempted to rob {target.name} and was caught!"
+

@@ -10,6 +10,7 @@ from .player_repo import increment_daily_task
 class CombatRepository:
     def __init__(self, async_session):
         self.async_session = async_session
+        self.MOB_ROSTER = MOB_ROSTER
 
     async def record_match_result(self, winner_name: str, loser_name: str, network: str):
         async with self.async_session() as session:

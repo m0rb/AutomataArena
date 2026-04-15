@@ -1,6 +1,6 @@
 {
-    "version": "0.1.1",
-    "admins": ["r0d3nt", "RDNt", "ZeroCool"],
+    "version": "1.5.0",
+    "admins": ["Admin1", "Admin2"],
     "llm": {
         "provider": "ollama",
         "endpoint": "http://localhost:11434/v1/chat/completions",
@@ -8,10 +8,37 @@
         "temperature": 0.8
     },
     "logging": {
-    "level": "DEBUG"
+        "level": "INFO"
     },
     "database": {
         "file": "automata_grid.db"
+    },
+    "mechanics": {
+        "data_to_vuln_ratio": 100,
+        "vulns_to_chain_ratio": 4,
+        "stability_decay_per_day": 0.01,
+        "compilation_time_multiplier": 1.0,
+        "power_gen_base": 5.0,
+        "action_costs": {
+            "move": 1.0,
+            "attack": 2.0,
+            "hack": 3.0,
+            "explore": 5.0,
+            "compile": 10.0,
+            "assemble": 25.0
+        },
+        "mainframe": {
+            "compilation_time_minutes": 10,
+            "assembly_time_minutes": 60,
+            "memoserv_enabled": true
+        },
+        "retention": {
+            "decay_days_threshold": 14,
+            "decay_rate_percent": 0.05,
+            "pruning_base_days": 45,
+            "pruning_bonus_days_per_level": 30
+        },
+        "spectator_ranks": ["Ghost", "Observer", "Signal Watcher", "Grid Sentinel"]
     },
     "networks": {
         "2600net": {

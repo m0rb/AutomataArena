@@ -156,9 +156,11 @@ class GridNode:
                         nick_lower = source_nick.lower()
                         if nick_lower in self.channel_users:
                             self.channel_users[nick_lower]['chat_lines'] += 1
+                            asyncio.create_task(self.db.update_last_seen(source_nick, self.net_name))
                     
                     if msg.startswith(self.prefix):
                         is_admin = source_nick.lower() in self.admins
+                        asyncio.create_task(self.db.update_last_seen(source_nick, self.net_name))
                         asyncio.create_task(self.router.dispatch(source_nick, command, target, msg, is_admin))
 
             except Exception as e:

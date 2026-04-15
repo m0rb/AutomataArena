@@ -244,6 +244,110 @@ class PlayerRepository:
         ).options(selectinload(Character.current_node))
         return (await session.execute(stmt)).scalars().first()
 
+    async def update_last_seen(self, nick: str, network: str):
+        """Minimal overhead update for activity timestamps."""
+        async with self.async_session() as session:
+            nick_lower = nick.lower()
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                func.lower(Character.name) == nick_lower,
+                func.lower(NetworkAlias.nickname) == nick_lower,
+                NetworkAlias.network_name == network
+            )
+            char = (await session.execute(stmt)).scalars().first()
+            if char:
+                char.last_seen_at = datetime.datetime.now(datetime.timezone.utc)
+                await session.commit()
+
+    async def update_activity_stats(self, nick: str, network: str, chat_inc: int, idle_sec: float):
+        """Update persistent IdleRPG stats."""
+        async with self.async_session() as session:
+            nick_lower = nick.lower()
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                func.lower(Character.name) == nick_lower,
+                func.lower(NetworkAlias.nickname) == nick_lower,
+                NetworkAlias.network_name == network
+            )
+            char = (await session.execute(stmt)).scalars().first()
+            if char:
+                char.total_chat_messages += chat_inc
+                char.total_idle_seconds += idle_sec
+                char.last_seen_at = datetime.datetime.now(datetime.timezone.utc)
+                await session.commit()
+
+    async def get_spectator_stats(self, nick: str, network: str, config):
+        """Retrieve persistent stats and calculate ratio/rank."""
+        async with self.async_session() as session:
+            nick_lower = nick.lower()
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                func.lower(Character.name) == nick_lower,
+                func.lower(NetworkAlias.nickname) == nick_lower,
+                NetworkAlias.network_name == network
+            )
+            char = (await session.execute(stmt)).scalars().first()
+            if not char: return None
+            
+            idle_hours = char.total_idle_seconds / 3600.0
+            ratio = char.total_chat_messages / max(1, idle_hours)
+            
+            # Rank thresholds (configurable logic)
+            rank_idx = 0
+            if ratio > 2.0: rank_idx = 3
+            elif ratio > 0.5: rank_idx = 2
+            elif ratio > 0.1: rank_idx = 1
+            
+            ranks = config.get('mechanics', {}).get('spectator_ranks', ["Ghost", "Observer", "Signal Watcher", "Grid Sentinel"])
+            rank_name = ranks[min(rank_idx, len(ranks)-1)]
+            
+            return {
+                'name': char.name,
+                'chat_total': char.total_chat_messages,
+                'idle_hours': round(idle_hours, 2),
+                'ratio': round(ratio, 2),
+                'rank': rank_name,
+                'credits': char.credits,
+                'last_seen': char.last_seen_at.strftime("%Y-%m-%d %H:%M:%S") if char.last_seen_at else "Unknown"
+            }
+
+    async def tick_retention_policy(self, config):
+        """Perform unified decay and pruning for all characters."""
+        ret = config.get('mechanics', {}).get('retention', {})
+        decay_thresh = ret.get('decay_days_threshold', 14)
+        decay_rate = ret.get('decay_rate_percent', 0.05)
+        prune_base = ret.get('pruning_base_days', 45)
+        prune_bonus = ret.get('pruning_bonus_days_per_level', 30)
+        
+        async with self.async_session() as session:
+            # 1. Fetch all active characters
+            stmt = select(Character).where(Character.status == 'ACTIVE')
+            chars = (await session.execute(stmt)).scalars().all()
+            
+            now = datetime.datetime.now(datetime.timezone.utc)
+            decay_applied, pruned_count = 0, 0
+            
+            for char in chars:
+                if not char.last_seen_at: continue
+                # Fix for awareness
+                last_seen = char.last_seen_at.replace(tzinfo=datetime.timezone.utc) if not char.last_seen_at.tzinfo else char.last_seen_at
+                days_absent = (now - last_seen).days
+                
+                # Apply Decay
+                if days_absent >= decay_thresh:
+                    weeks_over = (days_absent - decay_thresh) // 7 + 1
+                    full_decay = (1 - decay_rate) ** weeks_over
+                    char.credits = round(char.credits * full_decay, 2)
+                    char.xp = int(char.xp * full_decay)
+                    char.total_chat_messages = int(char.total_chat_messages * full_decay)
+                    decay_applied += 1
+                
+                # Apply Pruning (Scaled Timeout)
+                timeout_days = prune_base + (char.level * prune_bonus)
+                if days_absent > timeout_days:
+                    char.status = 'DELETED' # Soft delete or just remove
+                    pruned_count += 1
+            
+            await session.commit()
+            return decay_applied, pruned_count
+
     async def active_powergen(self, name: str, network: str) -> tuple:
         async with self.async_session() as session:
             name_lower = name.lower()

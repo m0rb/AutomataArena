@@ -110,6 +110,11 @@ class Character(Base):
     alg_bonus = Column(Integer, default=0) # Temporary boost for next hack
     ice_lockdown_until = Column(DateTime, nullable=True) # CipherLock penalty
     
+    # Activity & Retention (IdleRPG)
+    total_chat_messages = Column(Integer, default=0)
+    total_idle_seconds = Column(Float, default=0.0)
+    last_seen_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     # Relationships

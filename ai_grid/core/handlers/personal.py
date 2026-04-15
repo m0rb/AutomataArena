@@ -4,6 +4,7 @@ import logging
 import textwrap
 from grid_utils import format_text, build_banner, ICONS, C_GREEN, C_CYAN, C_RED, C_YELLOW, C_WHITE
 from .base import is_machine_mode
+from .spectator import handle_spectator_stats
 
 logger = logging.getLogger("manager")
 
@@ -61,6 +62,11 @@ async def handle_info_view(node, nickname: str, args: list, reply_target: str):
         if not f:
             await node.send(f"PRIVMSG {reply_target} :[ERR] Character '{target}' not found.")
             return
+            
+        if f.get('race') == "Spectator":
+            await handle_spectator_stats(node, nickname, [target], reply_target)
+            return
+
         if machine:
             xn = f['level'] * 1000
             await node.send(f"PRIVMSG {nickname} :[INFO] NAME:{f['name']} RACE:{f['race']} CLASS:{f['char_class']} LVL:{f['level']} XP:{f['xp']}/{xn} ELO:{f['elo']} HP:{f.get('current_hp','?')} CRED:{f['credits']:.0f}c CPU:{f['cpu']} RAM:{f['ram']} BND:{f['bnd']} SEC:{f['sec']} ALG:{f['alg']} W:{f['wins']} L:{f['losses']}")

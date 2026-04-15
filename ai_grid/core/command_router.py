@@ -93,6 +93,15 @@ class CommandRouter:
                 asyncio.create_task(handlers.handle_leaderboard(self.node, source_nick, args, reply_target))
 
             # --- PHASE 6: MAP ---
+            elif verb == "spectator":
+                if args and args[0] == "stats":
+                    await handlers.handle_spectator_stats(self.node, source_nick, args[1:], reply_target)
+                else:
+                    await handlers.handle_spectator_view(self.node, source_nick, args, reply_target)
+            elif verb == "help":
+                if args and args[0] == "grid": await handlers.handle_grid_help(self.node, source_nick, reply_target)
+                elif args and args[0] == "spectator": await handlers.handle_spectator_help(self.node, source_nick, reply_target)
+                else: await handlers.handle_help_index(self.node, source_nick, reply_target)
             elif verb == "map":
                 asyncio.create_task(handlers.handle_grid_map(self.node, source_nick, reply_target))
 

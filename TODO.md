@@ -36,7 +36,7 @@ This document tracks active or upcoming, near-term tasks for AutomataArena.
 - [x] Global Economic Ticker (Item/Credit inflation/deflation via LLM)
 
 ## 📡 Phase 6: Grid Expansion & Polish (Completed)
-- [x] **Text map** for IRC (`!a grid map`)
+- [x] **2D Text map** for IRC (`!a grid map` / `!a grid`)
 - [x] **Machine-Readable Outputs** (`output mode machine`)
 - [x] **AI IQ Upgrade** (v1.5.0 combat logic refinements)
 - [x] **Puppet Mode Security** (Owner DMs override AI for 60s)

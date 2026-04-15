@@ -77,9 +77,12 @@ async def idle_payout_loop(node):
                 join_time = data.get('join_time', now)
                 chat_lines = data.get('chat_lines', 0)
                 idle_secs = now - join_time
-                earned = (idle_secs * 0.001) + (chat_lines * 0.01)
+                earned = (idle_secs * 0.001) + (chat_lines * 0.1) # Boosted chat bonus
                 if earned > 0:
                     payouts[nick] = round(earned, 3)
+                
+                # PERSIST STATS
+                await node.db.update_activity_stats(nick, node.net_name, chat_lines, idle_secs)
                 
                 if nick in node.channel_users:
                     node.channel_users[nick]['join_time'] = now
@@ -89,7 +92,13 @@ async def idle_payout_loop(node):
                 idlers = list(payouts.keys())
                 await node.db.award_credits_bulk(payouts, node.net_name)
                 await node.db.tick_player_maintenance(node.net_name, idlers)
-                await node.send(f"PRIVMSG {node.config['channel']} :{build_banner(format_text('[ECONOMY] Hourly rewards distributed. Power and Stability restabilized.', C_GREEN))}")
+            
+            # Enforce Unified Retention Policy
+            decayed, pruned = await node.db.tick_retention_policy(node.config)
+            if decayed > 0 or pruned > 0:
+                logger.info(f"Retention Policy Enforced: {decayed} decayed, {pruned} pruned.")
+
+            await node.send(f"PRIVMSG {node.config['channel']} :{build_banner(format_text('[ECONOMY] Hourly rewards distributed. Absence-based retention policy enforced.', C_GREEN))}")
         except asyncio.CancelledError:
             break
         except Exception as e:

@@ -49,7 +49,49 @@ class NodeConnection(Base):
     target_node = relationship("GridNode", foreign_keys=[target_node_id])
 
 # ==========================================
-# 2. PLAYER PROGRESSION & IDENTITY
+# 2. MISSIONS & SYNDICATES (Moved up for Relationship Binding)
+# ==========================================
+class SyndicateMission(Base):
+    __tablename__ = 'syndicate_missions'
+    
+    id = Column(Integer, primary_key=True)
+    syndicate_id = Column(Integer, ForeignKey('syndicates.id'))
+    mission_type = Column(String) # POWER, SABOTAGE, MOB_SLAYER
+    target_value = Column(Float)
+    current_value = Column(Float, default=0.0)
+    reward_credits = Column(Float, default=0.0)
+    
+    expires_at = Column(DateTime)
+    is_active = Column(Boolean, default=True)
+    
+    syndicate = relationship("Syndicate", foreign_keys=[syndicate_id], back_populates="active_mission")
+
+class Syndicate(Base):
+    __tablename__ = 'syndicates'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)
+    description = Column(String)
+    founder_id = Column(Integer, ForeignKey('characters.id', use_alter=True, name="fk_syn_founder"))
+    
+    credits = Column(Float, default=0.0)
+    power_stored = Column(Float, default=0.0)
+    max_power = Column(Float, default=10000.0)
+    
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    members = relationship("SyndicateMember", back_populates="syndicate")
+    
+    # Phase 7: Warfare & Missions
+    target_syndicate_id = Column(Integer, nullable=True) # ID of current rival
+    war_active_until = Column(DateTime, nullable=True) # 72h window
+    ceasefire_status = Column(String, default='NONE') # NONE, PROPOSED_BY_A, PROPOSED_BY_B
+    current_mission_id = Column(Integer, ForeignKey('syndicate_missions.id', use_alter=True, name="fk_syn_mission"), nullable=True)
+    
+    active_mission = relationship("SyndicateMission", foreign_keys=[current_mission_id], back_populates="syndicate")
+
+# ==========================================
+# 3. PLAYER PROGRESSION & IDENTITY
 # ==========================================
 class Player(Base):
     __tablename__ = 'players'
@@ -123,7 +165,7 @@ class Character(Base):
     syndicate = relationship("Syndicate", foreign_keys=[syndicate_id])
 
 # ==========================================
-# 3. INVENTORY SYSTEM
+# 4. INVENTORY SYSTEM
 # ==========================================
 class ItemTemplate(Base):
     __tablename__ = 'item_templates'
@@ -147,7 +189,7 @@ class InventoryItem(Base):
     template = relationship("ItemTemplate")
 
 # ==========================================
-# 4. MAINFRAME MANUFACTURING (THE GIBSON)
+# 5. MAINFRAME MANUFACTURING (THE GIBSON)
 # ==========================================
 class MainframeTask(Base):
     __tablename__ = 'mainframe_tasks'
@@ -162,7 +204,7 @@ class MainframeTask(Base):
     owner = relationship("Character")
 
 # ==========================================
-# 5. GLOBAL ECONOMY & MINI-GAMES
+# 6. GLOBAL ECONOMY & MINI-GAMES
 # ==========================================
 class AuctionListing(Base):
     __tablename__ = 'auction_listings'
@@ -210,33 +252,6 @@ class GlobalMarket(Base):
     multiplier = Column(Float, default=1.0)
     last_event = Column(String) # For flavor news
 
-# ==========================================
-# 6. SYNDICATES & ALLIANCES
-# ==========================================
-class Syndicate(Base):
-    __tablename__ = 'syndicates'
-    
-    id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True, nullable=False)
-    description = Column(String)
-    founder_id = Column(Integer, ForeignKey('characters.id', use_alter=True, name="fk_syn_founder"))
-    
-    credits = Column(Float, default=0.0)
-    power_stored = Column(Float, default=0.0)
-    max_power = Column(Float, default=10000.0)
-    
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    
-    members = relationship("SyndicateMember", back_populates="syndicate")
-    
-    # Phase 7: Warfare & Missions
-    target_syndicate_id = Column(Integer, nullable=True) # ID of current rival
-    war_active_until = Column(DateTime, nullable=True) # 72h window
-    ceasefire_status = Column(String, default='NONE') # NONE, PROPOSED_BY_A, PROPOSED_BY_B
-    current_mission_id = Column(Integer, ForeignKey('syndicate_missions.id', use_alter=True, name="fk_syn_mission"), nullable=True)
-    
-    active_mission = relationship("SyndicateMission", foreign_keys=[current_mission_id])
-
 class SyndicateMember(Base):
     __tablename__ = 'syndicate_members'
     
@@ -249,21 +264,3 @@ class SyndicateMember(Base):
     
     syndicate = relationship("Syndicate", back_populates="members")
     character = relationship("Character")
-
-# ==========================================
-# 7. PHASE 7: MISSIONS & WARFARE
-# ==========================================
-class SyndicateMission(Base):
-    __tablename__ = 'syndicate_missions'
-    
-    id = Column(Integer, primary_key=True)
-    syndicate_id = Column(Integer, ForeignKey('syndicates.id'))
-    mission_type = Column(String) # POWER, SABOTAGE, MOB_SLAYER
-    target_value = Column(Float)
-    current_value = Column(Float, default=0.0)
-    reward_credits = Column(Float, default=0.0)
-    
-    expires_at = Column(DateTime)
-    is_active = Column(Boolean, default=True)
-    
-    syndicate = relationship("Syndicate", foreign_keys=[syndicate_id])

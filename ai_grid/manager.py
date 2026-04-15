@@ -6,10 +6,10 @@ import ssl
 import json
 import sys
 import logging
-from arena_utils import format_text, build_banner, ICONS, C_GREEN, C_CYAN, C_RED, C_YELLOW
-from arena_llm import ArenaLLM
-from arena_db import ArenaDB
-from arena_combat import CombatEngine, Entity
+from grid_utils import format_text, build_banner, ICONS, C_GREEN, C_CYAN, C_RED, C_YELLOW
+from grid_llm import ArenaLLM
+from grid_db import ArenaDB
+from grid_combat import CombatEngine, Entity
 
 # --- Config Load ---
 try:
@@ -346,7 +346,7 @@ class GridNode:
 
     async def handle_mob_encounter(self, nick: str, node_name: str, threat: int, prev_node: str, reply_target: str):
         """Send a [MOB] warning and give the player 15s to engage or flee."""
-        from arena_db import ArenaDB
+        from grid_db import ArenaDB
         mob = self.db.MOB_ROSTER.get(threat, self.db.MOB_ROSTER[1])
         mob_name = mob['name']
 

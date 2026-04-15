@@ -718,11 +718,32 @@ async def handle_options(node, nickname: str, args: list, reply_target: str):
 async def handle_admin_command(node, admin_nick: str, verb: str, args: list, reply_target: str):
     logger.warning(f"SYSADMIN OVERRIDE: {admin_nick} -> {verb}")
     if verb == "status":
+        import time
+        # 1. Base Population & Systems
         fighters = await node.db.list_fighters(node.net_name)
         b_stat = f"ACTIVE (Turn {node.active_engine.turn})" if node.active_engine and node.active_engine.active else "STANDBY"
-        msg = f"[SYS_TELEMETRY] Arena: {b_stat} | Bots: {len(fighters)} | Queue: {len(node.match_queue)} | Ready: {len(node.ready_players)}"
-        if reply_target.startswith(('#', '&', '+', '!')): await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(msg, C_CYAN))}")
-        else: await node.send(f"PRIVMSG {reply_target} :{msg}")
+        
+        # 2. Grid & Economy Telemetry
+        grid = await node.db.get_grid_telemetry()
+        econ = await node.db.get_global_economy()
+        
+        # 3. Uptime
+        uptime_sec = time.time() - node.hub.start_time
+        h = int(uptime_sec // 3600); m = int((uptime_sec % 3600) // 60)
+        uptime = f"{h}h {m}m"
+
+        # 4. Multi-line Report
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ ARENA MAINFRAME TELEMETRY ]', C_CYAN, True))}")
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'UPTIME: {uptime} | STATUS: {b_stat} | BOTS: {len(fighters)}', C_WHITE))}")
+        
+        grid_msg = f"GRID: {grid['claimed_nodes']}/{grid['total_nodes']} nodes ({grid['claimed_percent']:.1f}%) | MESH: {grid['total_power']:.0f}uP"
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(grid_msg, C_GREEN))}")
+        
+        econ_msg = f"ECON: {econ['total_credits']:.0f}c Total Liquidity | {econ['total_data_units']:.1f}u Total Data"
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(econ_msg, C_YELLOW))}")
+        
+        queue_msg = f"QUEUE: {len(node.match_queue)} in line | {len(node.ready_players)} ready to drop"
+        await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(queue_msg, C_CYAN))}")
     elif verb == "battlestop":
         if node.active_engine and node.active_engine.active:
             node.active_engine.active = False

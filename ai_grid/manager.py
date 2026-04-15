@@ -174,6 +174,8 @@ class GridNode:
 
 class MasterHub:
     def __init__(self):
+        import time
+        self.start_time = time.time()
         self.llm = ArenaLLM(CONFIG); self.db = ArenaDB(); self.nodes = {}
     async def start(self):
         for net_name, net_config in CONFIG['networks'].items():

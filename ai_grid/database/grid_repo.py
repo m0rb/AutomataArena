@@ -415,3 +415,23 @@ class GridRepository:
                 
                 await session.commit()
                 return {"status": "failure", "msg": "The exploration sequence yielded no actionable data."}
+
+    async def get_grid_telemetry(self) -> dict:
+        """Returns aggregate metrics for the entire grid."""
+        async with self.async_session() as session:
+            # 1. Total Nodes vs Claimed
+            all_nodes = (await session.execute(select(GridNode))).scalars().all()
+            total_count = len(all_nodes)
+            claimed_nodes = [n for n in all_nodes if n.owner_character_id is not None]
+            
+            # 2. Total Power Mesh
+            total_power = sum(n.power_stored for n in all_nodes)
+            total_gen = sum(n.power_generated for n in all_nodes)
+            
+            return {
+                "total_nodes": total_count,
+                "claimed_nodes": len(claimed_nodes),
+                "total_power": total_power,
+                "total_generation": total_gen,
+                "claimed_percent": (len(claimed_nodes) / total_count * 100) if total_count > 0 else 0
+            }

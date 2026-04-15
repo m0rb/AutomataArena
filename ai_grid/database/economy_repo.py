@@ -277,3 +277,16 @@ class EconomyRepository:
             stmt = select(GlobalMarket)
             results = (await session.execute(stmt)).scalars().all()
             return {r.item_type: r.multiplier for r in results}
+
+    async def get_global_economy(self) -> dict:
+        """Returns total credits in circulation among all characters."""
+        async with self.async_session() as session:
+            stmt = select(Character)
+            all_chars = (await session.execute(stmt)).scalars().all()
+            total_creds = sum(c.credits for c in all_chars)
+            total_data = sum(c.data_units for c in all_chars)
+            return {
+                "total_credits": total_creds,
+                "total_data_units": total_data,
+                "bot_count": len(all_chars)
+            }

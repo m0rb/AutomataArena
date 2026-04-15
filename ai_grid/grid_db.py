@@ -124,10 +124,12 @@ class ArenaDB:
     async def siphon_node(self, name, network): return await self.grid.siphon_node(name, network)
     async def hack_node(self, name, network): return await self.grid.hack_node(name, network)
     async def tick_grid_power(self): return await self.grid.tick_grid_power()
+    async def get_grid_telemetry(self): return await self.grid.get_grid_telemetry()
 
     async def list_shop_items(self): return await self.economy.list_shop_items()
     async def award_credits_bulk(self, payouts, network): return await self.economy.award_credits_bulk(payouts, network)
     async def process_transaction(self, name, network, action, item_name): return await self.economy.process_transaction(name, network, action, item_name)
+    async def get_global_economy(self): return await self.economy.get_global_economy()
 
     async def record_match_result(self, winner_name, loser_name, network): return await self.combat.record_match_result(winner_name, loser_name, network)
     async def resolve_mob_encounter(self, name, network, threat_level): return await self.combat.resolve_mob_encounter(name, network, threat_level)

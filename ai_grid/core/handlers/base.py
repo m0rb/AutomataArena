@@ -37,7 +37,15 @@ async def handle_help(node, nick: str, args: list, reply_target: str):
         "attack": {"desc": "Primary kinetic strike against another Persona.", "syntax": "attack <nick>"},
         "rob": {"desc": "Siphon credits from an unsuspecting target.", "syntax": "rob <nick>"},
         "queue": {"desc": "Register for the next Arena gladiator match.", "syntax": "queue"},
-        "ready": {"desc": "Commit to an arena drop sequence.", "syntax": "ready <token>"}
+        "ready": {"desc": "Commit to an arena drop sequence.", "syntax": "ready <token>"},
+        "powergen": {"desc": "Active stability-based power generation.", "syntax": "powergen"},
+        "train": {"desc": "Recover status and stability via training.", "syntax": "train"},
+        "siphon": {"desc": "Forcible extraction from a rival grid node.", "syntax": "siphon grid"},
+        "spectator": {"desc": "View or join the IdleRPG. Ranks earn credits by idling.", "syntax": "spectator [stats]"},
+        "news": {"desc": "Display the latest Grid SIGACTs/News ticker.", "syntax": "news"},
+        "engage": {"desc": "Step into a pending Grid Bug encounter.", "syntax": "engage"},
+        "flee": {"desc": "Retreat from an encounter to a safe node.", "syntax": "flee"},
+        "ping": {"desc": "Verify network latency to the Mainframe.", "syntax": "ping"}
     }
 
     if args:
@@ -56,12 +64,12 @@ async def handle_help(node, nick: str, args: list, reply_target: str):
 
     # Generic Categorical Help
     help_categories = {
-        "🧭 NAVIGATION": ["grid", "move", "explore", "map"],
-        "🆔 IDENTITY": ["register", "info", "tasks", "options"],
+        "🧭 NAVIGATION": ["grid", "move", "explore", "map", "flee"],
+        "🆔 IDENTITY": ["register", "info", "tasks", "options", "spectator", "news"],
         "💰 ECONOMY": ["shop", "buy/sell", "auction", "market"],
         "🏗️ THE GIBSON": ["mainframe", "compile", "assemble", "use"],
-        "⚔️ TACTICAL": ["claim", "upgrade", "hack/raid", "repair"],
-        "🎮 GAMES": ["cipher/guess", "dice", "top", "attack/rob", "queue/ready"]
+        "⚔️ TACTICAL": ["claim", "upgrade", "hack/raid", "repair", "siphon", "powergen", "train"],
+        "🎮 GAMES": ["cipher/guess", "dice", "top", "attack/rob", "queue/ready", "engage"]
     }
 
     await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text('[ AUTOMATA ARENA v1.6.0 - COMMAND INTERFACE ]', C_CYAN, bold=True))}")

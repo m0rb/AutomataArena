@@ -321,7 +321,7 @@ class GridRepository:
                 node.power_stored -= base_amount
                 char.power += yield_amount
                 await session.commit()
-                return True, f"Nodal Siphon Successful: Reclaimed {yield_amount:.1f} uP from {node.name}.{loss_msg}"
+                return True, f"Nodal Siphon Successful: Reclaimed {yield_amount:.1f} uP from {node.name}.{loss_msg}", None
             
             # Hostile Siphon (BREACHED logic: Requires OPEN node)
             if node.visibility_mode == 'CLOSED':

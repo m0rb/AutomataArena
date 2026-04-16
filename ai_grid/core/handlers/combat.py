@@ -61,12 +61,17 @@ async def resolve_mob(node, nick: str, reply_target: str):
 
 async def handle_pvp_command(node, nickname: str, reply_target: str, action: str, target_name: str):
     if not await check_rate_limit(node, nickname, reply_target, cooldown=30): return
-    success, msg = False, ""
-    if action == "attack": success, msg = await node.db.grid_attack(nickname, target_name, node.net_name)
-    elif action == "hack": success, msg = await node.db.grid_hack(nickname, target_name, node.net_name)
-    elif action == "rob": success, msg = await node.db.grid_rob(nickname, target_name, node.net_name)
-    if success: await node.send(f"PRIVMSG {node.config['channel']} :{tag_msg(format_text(msg, C_YELLOW), tags=['SIGACT', 'COMBAT'])}")
-    else: await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(msg, C_RED), tags=['COMBAT', nickname])}")
+    success, msg, reward = False, "", None
+    if action == "attack": success, msg, reward = await node.db.grid_attack(nickname, target_name, node.net_name)
+    elif action == "hack": success, msg, reward = await node.db.grid_hack(nickname, target_name, node.net_name)
+    elif action == "rob": success, msg, reward = await node.db.grid_rob(nickname, target_name, node.net_name)
+    
+    if success: 
+        await node.send(f"PRIVMSG {node.config['channel']} :{tag_msg(format_text(msg, C_YELLOW), tags=['SIGACT', 'COMBAT'])}")
+        if reward:
+            await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(reward, C_CYAN), tags=['SIGACT', nickname])}")
+    else: 
+        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(msg, C_RED), tags=['COMBAT', nickname])}")
 
 async def handle_ready(node, nick: str, token: str, reply_target: str):
     if await node.db.authenticate_fighter(nick, node.net_name, token):

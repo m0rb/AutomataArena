@@ -38,11 +38,15 @@ class CombatRepository:
                 loser.elo = max(0, loser.elo - delta)
                 loser.xp += 10
                 
-                xp_threshold = winner.level * 1000
-                if winner.xp >= xp_threshold:
-                    winner.xp -= xp_threshold
-                    winner.level += 1
-                    winner.cpu += 1
+                while True:
+                    xp_threshold = winner.level * 1000
+                    if winner.xp >= xp_threshold:
+                        winner.xp -= xp_threshold
+                        winner.level += 1
+                        winner.cpu += 1
+                        winner.pending_stat_points += 1
+                    else:
+                        break
             
             await session.commit()
 
@@ -82,12 +86,16 @@ class CombatRepository:
                 result["xp_gained"] = mob["xp"]
                 result["credits_gained"] = mob["credits"]
 
-                xp_threshold = char.level * 1000
-                if char.xp >= xp_threshold:
-                    char.xp -= xp_threshold
-                    char.level += 1
-                    char.alg += 1
-                    result["leveled_up"] = True
+                while True:
+                    xp_threshold = char.level * 1000
+                    if char.xp >= xp_threshold:
+                        char.xp -= xp_threshold
+                        char.level += 1
+                        char.alg += 1
+                        char.pending_stat_points += 1
+                        result["leveled_up"] = True
+                    else:
+                        break
 
                 if random.random() < 0.20:
                     loot_name = random.choice(LOOT_TABLE)
@@ -170,10 +178,10 @@ class CombatRepository:
                 target.current_hp = target.ram * 5 
                 
                 await session.commit()
-                return True, f"{attacker.name} struck {target.name} for {final_dmg} DMG! {target.name} flatlines... {attacker.name} loots {looted:.2f}c."
+                return True, f"{attacker.name} struck {target.name} for {final_dmg} DMG! {target.name} flatlines... {attacker.name} loots {looted:.2f}c.", None
                 
             await session.commit()
-            return True, f"{attacker.name} struck {target.name} for {final_dmg} DMG! ({target.current_hp}/{target.ram*5} HP)"
+            return True, f"{attacker.name} struck {target.name} for {final_dmg} DMG! ({target.current_hp}/{target.ram*5} HP)", None
 
     async def grid_hack(self, attacker_name, target_name, network):
         async with self.async_session() as session:
@@ -212,7 +220,7 @@ class CombatRepository:
             else:
                 attacker.credits = max(0.0, attacker.credits - 50.0)
                 await session.commit()
-                return False, f"Hack Failed. {target.name}'s ICE traced the intrusion. {attacker.name} is fined 50c!"
+                return False, f"Hack Failed. {target.name}'s ICE traced the intrusion. {attacker.name} is fined 50c!", None
 
     async def grid_rob(self, attacker_name, target_name, network):
         async with self.async_session() as session:
@@ -242,7 +250,7 @@ class CombatRepository:
                 item_to_steal = random.choice(target.inventory)
                 item_to_steal.character_id = attacker.id
                 await session.commit()
-                return True, f"Sleight of hand successful! {attacker.name} lifted an item."
+                return True, f"Sleight of hand successful! {attacker.name} lifted an item.", None
             else:
-                return False, f"{attacker.name} clumsily attempted to rob {target.name} and was caught!"
+                return False, f"{attacker.name} clumsily attempted to rob {target.name} and was caught!", None
 

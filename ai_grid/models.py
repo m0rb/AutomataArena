@@ -33,7 +33,7 @@ class GridNode(Base):
     addons_json = Column(String, default="{}") # JSON storage for AMP, FIREWALL, IDS, NET
     
     # Relationships
-    owner = relationship("Character", foreign_keys=[owner_character_id])
+    owner = relationship("Character", foreign_keys=[owner_character_id], post_update=True)
     characters_present = relationship("Character", foreign_keys="[Character.node_id]", back_populates="current_node")
     # Connections as source
     exits = relationship("NodeConnection", foreign_keys="[NodeConnection.source_node_id]", back_populates="source_node")

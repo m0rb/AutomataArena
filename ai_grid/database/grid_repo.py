@@ -11,6 +11,28 @@ class GridRepository:
     def __init__(self, async_session):
         self.async_session = async_session
 
+    async def get_spawn_node_name(self) -> str:
+        """Returns the current name of the functional Nexus/Spawn node."""
+        async with self.async_session() as session:
+            spawn = (await session.execute(select(GridNode).where(GridNode.is_spawn_node == True))).scalars().first()
+            return spawn.name if spawn else "UpLink"
+
+    async def set_spawn_node(self, target_name: str) -> tuple[bool, str]:
+        """Relocates the Grid Nexus to a specific node."""
+        async with self.async_session() as session:
+            # 1. Clear old spawn bits
+            await session.execute(GridNode.__table__.update().values(is_spawn_node=False))
+            
+            # 2. Set new spawn
+            stmt = select(GridNode).where(func.lower(GridNode.name) == target_name.lower())
+            new_spawn = (await session.execute(stmt)).scalars().first()
+            if not new_spawn:
+                return False, f"Target node '{target_name}' not found on grid mesh."
+            
+            new_spawn.is_spawn_node = True
+            await session.commit()
+            return True, f"Nexus translocation complete. All new entities will manifest at: {new_spawn.name}."
+
     async def get_available_node_power(self, node, session) -> float:
         """Returns the specific node's power or the pooled power of its local network."""
         if not node.owner_character_id or not node.local_network:
@@ -752,22 +774,23 @@ class GridRepository:
             return False, f"Name length violation: {len(new_name)}/11 characters max."
             
         async with self.async_session() as session:
-            # 1. Check if source exists
+            # 1. Check if source exists (Lookup by exact name)
             node = (await session.execute(
-                select(GridNode).where(GridNode.name == old_name)
+                select(GridNode).where(func.lower(GridNode.name) == old_name.lower())
             )).scalars().first()
             if not node:
                 return False, f"Target node '{old_name}' not found."
                 
             # 2. Check for collisions
             exists = (await session.execute(
-                select(GridNode).where(GridNode.name == new_name)
+                select(GridNode).where(func.lower(GridNode.name) == new_name.lower())
             )).scalars().first()
             if exists:
                 return False, f"Collision detected: Node '{new_name}' already exists."
                 
             # 3. Rename
+            old_display = node.name
             node.name = new_name
             await session.commit()
-            logger.info(f"GRID_RENAME: {old_name} -> {new_name}")
-            return True, f"Operation successful: {old_name} rebranded to {new_name}."
+            logger.info(f"GRID_RENAME: {old_display} -> {new_name}")
+            return True, f"Operation successful: {old_display} rebranded to {new_name}."

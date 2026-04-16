@@ -145,3 +145,26 @@ class ArenaLLM:
         if raw.startswith("ERROR"):
             return "Datastream corrupted. Cannot parse news feed at this time."
         return raw
+
+    async def generate_grid_nodes(self, count: int) -> list[dict]:
+        """Generates procedural grid nodes with one-word names."""
+        logger.info(f"Requesting procedural generation of {count} nodes.")
+        system = (
+            "You are the structural architect of a cyberpunk grid. "
+            "Return ONLY valid JSON. Format: [{\"name\": \"<ONE_WORD>\", \"desc\": \"<GRITTY_TEXT>\", \"type\": \"wilderness\", \"threat\": 1}]. "
+            "Names must be exactly one word, capitalized (e.g., 'VAULT', 'VOID', 'SPIRE'). "
+            "Descriptions should be one atmospheric sentence under 100 characters."
+        )
+        user = f"Generate {count} unique grid nodes for a processing wasteland."
+        raw = await asyncio.to_thread(self._make_request, system, user)
+        
+        if raw.startswith("ERROR"):
+            return []
+            
+        try:
+            # Clean JSON if LLM added markdown
+            clean = raw.replace("```json", "").replace("```", "").strip()
+            return json.loads(clean)
+        except Exception as e:
+            logger.error(f"Failed to parse node generation JSON: {e} - Raw: {raw}")
+            return []

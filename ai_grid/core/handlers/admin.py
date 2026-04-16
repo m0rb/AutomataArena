@@ -82,8 +82,44 @@ async def handle_admin_command(node, admin_nick: str, verb: str, args: list, rep
             if success:
                 announcement = format_text(f"NODE REBRANDED: {old_name} is now known as {new_name}.", C_CYAN, True)
                 await node.send(f"PRIVMSG {node.config['channel']} :{tag_msg(announcement, tags=['SIGACT'])}")
+        elif len(full_args) >= 2 and full_args[0].lower() == "seed":
+            try: count = int(full_args[1])
+            except: count = 1
+            if count > 5: count = 5 # Limit per operation
+            await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(f'Initiating procedural grid expansion ({count} nodes)...', C_YELLOW), tags=['SIGINT'])}")
+            
+            new_nodes = await node.llm.generate_grid_nodes(count)
+            added_count = 0
+            for n_data in new_nodes:
+                # Add individual nodes to DB
+                stmt = select(node.db.models.GridNode).where(node.db.models.GridNode.name == n_data['name'])
+                async with node.db.async_session() as session:
+                    exists = (await session.execute(stmt)).scalars().first()
+                    if not exists:
+                        node_obj = node.db.models.GridNode(
+                            name=n_data['name'], 
+                            description=n_data['desc'], 
+                            node_type=n_data.get('type', 'wilderness'),
+                            threat_level=n_data.get('threat', 1)
+                        )
+                        session.add(node_obj)
+                        await session.commit()
+                        added_count += 1
+            
+            feedback = f"Expansion complete. Synced {added_count} new sectors to the mesh."
+            await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(feedback, C_GREEN), tags=['SIGINT'])}")
+            
+        elif full_args[0].lower() == "spawn":
+            if len(full_args) >= 2:
+                target_node = full_args[1]
+                success, feedback = await node.db.grid.set_spawn_node(target_node)
+                tag = "SIGINT" if success else "OSINT"
+                await node.send(f"PRIVMSG {reply_target} :{tag_msg(feedback, tags=[tag])}")
+            else:
+                current_spawn = await node.db.grid.get_spawn_node_name()
+                await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(f'Current Grid Nexus: {current_spawn}', C_CYAN), tags=['SIGINT'])}")
         else:
-            await node.send(f"PRIVMSG {reply_target} :[ERR] Syntax: {node.prefix} admin grid rename <old> <new>")
+            await node.send(f"PRIVMSG {reply_target} :[ERR] Syntax: {node.prefix} admin grid <rename|seed|spawn> [args]")
     elif verb in ["shutdown", "stop"]:
         await node.send(f"PRIVMSG {node.config['channel']} :{tag_msg(format_text('MAINFRAME SHUTDOWN INITIATED BY ADMIN.', C_RED, True), tags=['SIGACT'])}")
         if node.active_engine: node.active_engine.active = False

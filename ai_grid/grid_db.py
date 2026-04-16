@@ -42,7 +42,7 @@ class ArenaDB:
         
         async with self.async_session() as session:
             # 1. Initialize Nodes
-            uplink = GridNode(name="UpLink", description="The central nexus. A safezone where new connections manifest.", node_type="safezone")
+            uplink = GridNode(name="UpLink", description="The central nexus. A safezone where new connections manifest.", node_type="safezone", is_spawn_node=True)
             arena_node = GridNode(name="The_Arena", description="The main fighting grounds. Blood and RAM are spilled here.", node_type="arena")
             wilderness = GridNode(name="The_CPU_Socket", description="A vast wasteland of processing power. Danger lurks.", node_type="wilderness")
             black_market = GridNode(name="Black_Market_Port", description="Shadowy merchants peddle encrypted wares here.", node_type="merchant")
@@ -140,29 +140,51 @@ class ArenaDB:
     async def run_repairs(self):
         """Self-heal core data and connections."""
         logger.info("Executing database self-repair...")
-        await self.seed_grid_expansion()
-        # Ensure at least UpLink exists
+        
+        # 1. Item Seeding (Always additive)
+        await self.seed_items_only()
+        
+        # 2. Spawn Node Check
         async with self.async_session() as session:
-            uplink = (await session.execute(select(GridNode).where(GridNode.name == "UpLink"))).scalars().first()
-            if not uplink:
-                session.add(GridNode(name="UpLink", description="Central nexus.", node_type="safezone"))
+            spawn = (await session.execute(select(GridNode).where(GridNode.is_spawn_node == True))).scalars().first()
+            if not spawn:
+                # Fallback: Find UpLink or first safezone
+                fallback = (await session.execute(select(GridNode).where(GridNode.name == "UpLink"))).scalars().first()
+                if not fallback:
+                    fallback = (await session.execute(select(GridNode).where(GridNode.node_type == "safezone"))).scalars().first()
+                
+                if fallback:
+                    fallback.is_spawn_node = True
+                    logger.info(f"Restored Spawn Flag to existing node: {fallback.name}")
+                else:
+                    new_uplink = GridNode(name="UpLink", description="Central nexus.", node_type="safezone", is_spawn_node=True)
+                    session.add(new_uplink)
+                    logger.info("Restored missing central nexus (Uplink).")
                 await session.commit()
-                logger.info("Restored missing central nexus (Uplink).")
+        
         logger.info("Repair sequence finished.")
         return True
 
-    async def seed_grid_expansion(self):
+    async def seed_items_only(self):
+        """Add missing item templates without touching the map."""
         async with self.async_session() as session:
-            # Seed item templates
             for tpl_data in LOOT_TEMPLATES:
                 exists = (await session.execute(select(ItemTemplate).where(ItemTemplate.name == tpl_data["name"]))).scalars().first()
                 if not exists: session.add(ItemTemplate(**tpl_data))
-            await session.flush()
+            await session.commit()
+
+    async def seed_grid_expansion(self):
+        """Smart Seeding: Only for Empty Maps."""
+        async with self.async_session() as session:
+            node_count = (await session.execute(select(func.count(GridNode.id)))).scalar()
+            if node_count > 0:
+                logger.info("Grid already contains mapped sectors. Skipping smart seeding.")
+                return
 
             # Seed nodes
             for name, desc, node_type, threat in GRID_EXPANSION:
-                exists = (await session.execute(select(GridNode).where(GridNode.name == name))).scalars().first()
-                if not exists: session.add(GridNode(name=name, description=desc, node_type=node_type, threat_level=threat))
+                is_spawn = (name == "UpLink")
+                session.add(GridNode(name=name, description=desc, node_type=node_type, threat_level=threat, is_spawn_node=is_spawn))
             await session.flush()
 
             # Seed connections

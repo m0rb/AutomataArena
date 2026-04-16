@@ -27,6 +27,10 @@ class GridNode(Base):
     is_hidden = Column(Boolean, default=False)
     visibility_mode = Column(String, default='OPEN') # OPEN, CLOSED
     irc_affinity = Column(String, nullable=True) # Mapping to IRC Network (e.g. Rizon)
+    local_network = Column(String, nullable=True) # Named subnet for power pooling
+    
+    # Hardware & Infrastructure
+    addons_json = Column(String, default="{}") # JSON storage for AMP, FIREWALL, IDS, NET
     
     # Relationships
     owner = relationship("Character", foreign_keys=[owner_character_id])
@@ -207,6 +211,24 @@ class GlobalMarket(Base):
     __tablename__ = 'global_market'
     
     id = Column(Integer, primary_key=True)
+    category = Column(String, nullable=False)
+    multiplier = Column(Float, default=1.0)
+    last_news = Column(String)
+
+class Memo(Base):
+    __tablename__ = 'memos'
+    
+    id = Column(Integer, primary_key=True)
+    sender_id = Column(Integer, ForeignKey('characters.id'), nullable=True) # Null = System
+    recipient_id = Column(Integer, ForeignKey('characters.id'), nullable=False)
+    message = Column(String, nullable=False)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    is_read = Column(Boolean, default=False)
+    source_node_id = Column(Integer, ForeignKey('grid_nodes.id'), nullable=True)
+    
+    recipient = relationship("Character", foreign_keys=[recipient_id])
+    sender = relationship("Character", foreign_keys=[sender_id])
+    source_node = relationship("GridNode")
     item_type = Column(String, nullable=False) # junk, hack, weapon, gear
     multiplier = Column(Float, default=1.0)
     last_event = Column(String) # For flavor news

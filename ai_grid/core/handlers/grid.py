@@ -102,25 +102,112 @@ async def handle_grid_map(node, nick: str, reply_target: str):
         for line in map_text.split("\n"):
             await node.send(f"PRIVMSG {reply_target} :{tag_msg(line, tags=['GEOINT'], is_machine=machine)}")
 
-async def handle_grid_command(node, nickname: str, reply_target: str, action: str):
+async def handle_node_probe(node, nick: str, reply_target: str):
+    """SigInt report on current nodal architecture."""
+    if not await check_rate_limit(node, nick, reply_target, cooldown=15): return
+    result = await node.db.probe_node(nick, node.net_name)
+    if not result.get("success", True):
+        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(result.get('error', 'PROBE_FAILED'), C_RED), tags=['SIGINT', nick])}")
+        return
+
+    machine = await is_machine_mode(node, nick)
+    if machine:
+        addons = ",".join(result['addons']) if result['addons'] else "none"
+        occupants = ",".join(result['occupants']) if result['occupants'] else "none"
+        line = f"PROBE:{result['name']} LVL:{result['level']} DUR:{result['durability']:.1f}% THREAT:{result['threat']} ADDONS:[{addons}] OCCUPANTS:[{occupants}]"
+        await node.send(f"PRIVMSG {nick} :[SIGINT] {line}")
+        return
+
+    # User Output
+    header = format_text(f"[ SIGINT SCAN: {result['name']} ]", C_CYAN, True)
+    await node.send(f"PRIVMSG {reply_target} :{tag_msg(header, tags=['SIGINT'], location=result['name'])}")
+    
+    stats = f"Level: {result['level']} | Stability: {result['durability']:.1f}% | Integrity: {result['visibility']} | Threat: {result['threat']}"
+    await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(stats, C_GREEN), tags=['SIGINT'])}")
+    
+    # Reveal Hack DC and Bonus
+    if result.get('hack_dc'):
+        intel = f"INTELLIGENCE: Security DC {result['hack_dc']} detected. Alg Bonus +{result['bonus_granted']} applied to local buffer."
+        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(intel, C_CYAN), tags=['SIGINT'])}")
+
+    if result['addons']:
+        addon_str = " | ".join([f"[{a}]" for a in result['addons']])
+        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(f'Hardware detected: {addon_str}', C_YELLOW), tags=['SIGINT'])}")
+    
+    if result['occupants']:
+        occ_str = " | ".join(result['occupants'])
+        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(f'Active Occupants: {occ_str}', C_RED), tags=['SIGINT'])}")
+    else:
+        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text('Sector appears deserted.', C_WHITE), tags=['SIGINT'])}")
+
+async def handle_grid_command(node, nickname: str, reply_target: str, action: str, args: list = None):
+    args = args or []
+    alert_data = None
     if action == "claim": success, msg = await node.db.claim_node(nickname, node.net_name)
     elif action == "upgrade": success, msg = await node.db.upgrade_node(nickname, node.net_name)
-    elif action == "siphon": success, msg = await node.db.siphon_node(nickname, node.net_name)
     elif action == "repair": success, msg = await node.db.grid_repair(nickname, node.net_name)
     elif action == "recharge": success, msg = await node.db.grid_recharge(nickname, node.net_name)
+    elif action == "probe": 
+        await handle_node_probe(node, nickname, reply_target)
+        return
+    elif action == "siphon":
+        percent = 100.0
+        if len(args) > 0:
+            try: percent = float(args[0])
+            except: pass
+        res = await node.db.siphon_node(nickname, node.net_name, percent)
+        success, msg = res[0], res[1]
+        if len(res) > 2: alert_data = res[2]
+    elif action == "install":
+        if not args:
+            await node.send(f"PRIVMSG {reply_target} :Syntax: {node.prefix} grid install <hardware_name>")
+            return
+        result = await node.db.install_node_addon(nickname, node.net_name, args[0])
+        success, msg = result['success'], result['msg']
+    elif action == "bolster":
+        if not args:
+            await node.send(f"PRIVMSG {reply_target} :Syntax: {node.prefix} grid bolster <power_amount>")
+            return
+        try: amount = float(args[0])
+        except: 
+            await node.send(f"PRIVMSG {reply_target} :[ERR] Invalid amount.")
+            return
+        result = await node.db.bolster_node(nickname, node.net_name, amount)
+        success, msg = result['success'], result['msg']
+    elif action in ["link", "net"]:
+        if not args:
+            await node.send(f"PRIVMSG {reply_target} :Syntax: {node.prefix} grid net <local_network_name>")
+            return
+        result = await node.db.link_network(nickname, node.net_name, args[0])
+        success, msg = result['success'], result['msg']
     elif action == "hack":
         success, msg = await node.db.hack_node(nickname, node.net_name)
         if not success and msg == "PVE_GUARDIAN_SPAWN":
             await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text('[WARNING] Primary ICE activated. PvE Guardian routine detected.', C_RED), tags=['SIGACT', nickname])}")
             return
+    else:
+        return # Unknown activity
+
     await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(msg, C_GREEN if success else C_RED), tags=['SIGACT', nickname])}")
-    if success and action in ["claim", "upgrade", "hack", "repair", "recharge"]:
+    
+    if success and action in ["claim", "upgrade", "hack", "repair", "install", "net"]:
         await node.send(f"PRIVMSG {node.config['channel']} :{tag_msg(format_text(f'Grid Alert: {nickname} executed a territorial {action}!', C_YELLOW), tags=['SIGACT'])}")
         
         # Award XP for successful Grid actions
-        xp_map = {"claim": 25, "upgrade": 15, "hack": 10, "repair": 5, "recharge": 2}
+        xp_map = {"claim": 25, "upgrade": 15, "hack": 10, "repair": 5, "install": 10, "link": 10, "net": 10, "siphon": 5}
         if action in xp_map:
             await node.add_xp(nickname, xp_map[action], reply_target)
+
+    # Tactical Alert Delegation for Siphon
+    if success and action == "siphon" and alert_data:
+        prefs = await node.db.get_prefs_by_id(alert_data['recipient_id'])
+        if prefs.get("briefings_enabled", True):
+            if prefs.get("memo_target") == "irc":
+                await node.hub.send_memo(node.net_name, alert_data['recipient_id'], alert_data['message'])
+            else:
+                target_nick = await node.db.get_nickname_by_id(alert_data['recipient_id'])
+                if target_nick and target_nick.lower() in node.channel_users:
+                    await node.send(f"PRIVMSG {target_nick} :[ALERT] {alert_data['message']}")
 
 async def handle_grid_loot(node, nick: str, reply_target: str):
     if not await check_rate_limit(node, nick, reply_target, cooldown=60): return
@@ -132,6 +219,20 @@ async def handle_grid_loot(node, nick: str, reply_target: str):
     if result['success']:
         await node.send(f"PRIVMSG {node.config['channel']} :{tag_msg(format_text(result['sigact'], C_YELLOW, True), tags=['SIGACT'])}")
         await node.add_xp(nick, 10, reply_target)
+        
+        # Tactical Alert Delegation
+        if result.get("alert"):
+            alert = result['alert']
+            prefs = await node.db.get_prefs_by_id(alert['recipient_id'])
+            if prefs.get("briefings_enabled", True): # Only notify if briefings are ON
+                if prefs.get("memo_target") == "irc":
+                    await node.hub.send_memo(node.net_name, alert['recipient_id'], alert['message'])
+                else:
+                    # In-grid alerts are already in the DB as Memo objects
+                    # We might want to send a live NOTICE to the victim if they are online
+                    target_nick = await node.db.get_nickname_by_id(alert['recipient_id'])
+                    if target_nick and target_nick.lower() in node.channel_users:
+                        await node.send(f"PRIVMSG {target_nick} :[ALERT] {alert['message']}")
 
 async def handle_grid_network_msg(node, nick: str, args: list, reply_target: str):
     if len(args) < 3:

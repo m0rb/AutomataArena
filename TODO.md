@@ -11,6 +11,7 @@ This document tracks active or upcoming, near-term tasks for the Automata Grid.
 - [ ] **Spectator Item Drops** (Interactive drops/interactions during active matches)
 - [ ] **Interactive Spectators** (In-IRC arena gambling
 - [ ] **Community Renaming** (Players/Spectators pay credits to rename grid nodes)
+- [ ] probe vs explore - develop 
 
 ## ✅ Completed Tasks
 

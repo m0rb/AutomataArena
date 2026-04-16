@@ -5,28 +5,74 @@ import datetime
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy import func
-from models import Player, NetworkAlias, Character, InventoryItem, ItemTemplate, GridNode
+from models import Player, NetworkAlias, Character, InventoryItem, ItemTemplate, GridNode, Memo
 from .core import logger, DEFAULT_PREFS
 
 class PlayerRepository:
     def __init__(self, async_session):
         self.async_session = async_session
 
+    async def get_memos(self, name: str, network: str, only_unread: bool = False) -> list:
+        """Retrieves system memos for a character."""
+        async with self.async_session() as session:
+            stmt = select(Memo).join(Character, Memo.recipient_id == Character.id).join(Player).join(NetworkAlias).where(
+                Character.name == name,
+                NetworkAlias.nickname == name,
+                NetworkAlias.network_name == network
+            ).options(selectinload(Memo.sender), selectinload(Memo.source_node))
+            
+            if only_unread:
+                stmt = stmt.where(Memo.is_read == False)
+            
+            memos = (await session.execute(stmt.order_by(Memo.timestamp.desc()))).scalars().all()
+            return [{
+                "id": m.id,
+                "sender": m.sender.name if m.sender else "SYSTEM",
+                "message": m.message,
+                "timestamp": m.timestamp,
+                "is_read": m.is_read,
+                "node": m.source_node.name if m.source_node else None
+            } for m in memos]
+
+    async def mark_memos_read(self, name: str, network: str) -> int:
+        """Marks all unread memos as read for a character."""
+        async with self.async_session() as session:
+            char = await self.get_character_by_nick(name, network, session)
+            if not char: return 0
+            
+            stmt = select(Memo).where(Memo.recipient_id == char.id, Memo.is_read == False)
+            memos = (await session.execute(stmt)).scalars().all()
+            for m in memos:
+                m.is_read = True
+            await session.commit()
+            return len(memos)
+
     async def get_prefs(self, name: str, network: str) -> dict:
         async with self.async_session() as session:
-            name_lower = name.lower()
-            stmt = select(Character).join(Player).join(NetworkAlias).where(
-                func.lower(Character.name) == name_lower,
-                func.lower(NetworkAlias.nickname) == name_lower,
-                NetworkAlias.network_name == network
-            )
-            char = (await session.execute(stmt)).scalars().first()
-            if not char:
-                return dict(DEFAULT_PREFS)
+            char = await self.get_character_by_nick(name, network, session)
+            if not char: return dict(DEFAULT_PREFS)
             try:
                 return {**DEFAULT_PREFS, **json.loads(char.prefs or '{}')}
             except Exception:
                 return dict(DEFAULT_PREFS)
+
+    async def get_prefs_by_id(self, char_id: int) -> dict:
+        """Retrieves character preferences by character ID."""
+        async with self.async_session() as session:
+            stmt = select(Character).where(Character.id == char_id)
+            char = (await session.execute(stmt)).scalars().first()
+            if not char: return dict(DEFAULT_PREFS)
+            try:
+                return {**DEFAULT_PREFS, **json.loads(char.prefs or '{}')}
+            except Exception:
+                return dict(DEFAULT_PREFS)
+
+    async def get_nickname_by_id(self, char_id: int) -> str | None:
+        """Retrieves character name by character ID."""
+        async with self.async_session() as session:
+            stmt = select(Character).where(Character.id == char_id)
+            char = (await session.execute(stmt)).scalars().first()
+            return char.name if char else None
 
     async def set_pref(self, name: str, network: str, key: str, value) -> bool:
         async with self.async_session() as session:

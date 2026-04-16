@@ -106,12 +106,11 @@ async def handle_tasks_view(node, nickname: str, reply_target: str):
     if tasks.get("completed"): await node.send(f"PRIVMSG {reply_target} :🏆 " + format_text("All Tasks Completed! Bonus Paid.", C_YELLOW))
 
 async def handle_options(node, nickname: str, args: list, reply_target: str):
-    VALID = { 
-        "output": ("output_mode", {"human": "human", "machine": "machine"}), 
-        "tutorial": ("tutorial_mode", {"on": True, "off": False}), 
-        "reminders": ("reminders", {"on": True, "off": False}), 
-        "autosell": ("auto_sell_trash", {"on": True, "off": False}),
-        "msgtype": ("msgtype", {"notice": "NOTICE", "privmsg": "PRIVMSG"})
+    VALID = {
+        "msgtype": ("output_mode", {"human": "human", "machine": "machine"}),
+        "output": ("output_mode", {"human": "human", "machine": "machine"}),
+        "memo": ("memo_target", {"irc": "irc", "grid": "grid"}),
+        "briefings": ("briefings_enabled", {"on": True, "off": False})
     }
     prefs = await node.db.get_prefs(nickname, node.net_name)
     
@@ -215,3 +214,28 @@ async def handle_news_view(node, nickname: str, reply_target: str):
     await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text('[ BREAKING NEWS REPORT ]', C_CYAN, bold=True), tags=['OSINT'])}")
     for line in textwrap.wrap(news_text, width=200):
         await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(line, C_YELLOW), tags=['OSINT'])}")
+
+async def handle_memos(node, nick: str, args: list, reply_target: str):
+    """Retrieves and manages character memos."""
+    if args and args[0].lower() == "clear":
+        count = await node.db.player.mark_memos_read(nick, node.net_name)
+        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(f'Purged {count} tactical memos from local cache.', C_GREEN), tags=['SIGINT', nick])}")
+        return
+
+    memos = await node.db.player.get_memos(nick, node.net_name, only_unread=True)
+    if not memos:
+        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text('No active tactical alerts in the buffer.', C_WHITE), tags=['SIGINT', nick])}")
+        return
+
+    machine = await is_machine_mode(node, nick)
+    hdr = f"[ MEMO BUFFER: {len(memos)} ACTIVE ALERTS ]"
+    await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(hdr, C_CYAN, True), tags=['SIGINT'], is_machine=machine)}")
+    
+    for m in memos[:5]: # Limit to last 5
+        ts = m['timestamp'].strftime("%H:%M:%S")
+        origin = f" [{m['node']}]" if m['node'] else ""
+        text = f"{ts} FROM:{m['sender']}{origin} | {m['message']}"
+        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(text, C_YELLOW), tags=['SIGINT'], is_machine=machine)}")
+    
+    if len(memos) > 5:
+        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(f'... and {len(memos)-5} more alerts. Use \"!a memos clear\" to purge.', C_WHITE), tags=['SIGINT'], is_machine=machine)}")

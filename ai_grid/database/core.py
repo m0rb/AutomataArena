@@ -76,11 +76,17 @@ LOOT_TEMPLATES = [
     {"name": "Data_Shard",      "item_type": "junk", "base_value": 5,  "effects_json": "{}"},
     {"name": "Memory_Fragment", "item_type": "junk", "base_value": 8,  "effects_json": "{}"},
     {"name": "Corrupted_Bit",   "item_type": "junk", "base_value": 3,  "effects_json": "{}"},
+    {"name": "AMP",             "item_type": "node_addon", "base_value": 500, "effects_json": "{\"type\": \"AMP\"}"},
+    {"name": "FIREWALL",        "item_type": "node_addon", "base_value": 750, "effects_json": "{\"type\": \"FIREWALL\"}"},
+    {"name": "IDS",             "item_type": "node_addon", "base_value": 400, "effects_json": "{\"type\": \"IDS\"}"},
+    {"name": "NET",             "item_type": "node_addon", "base_value": 1000, "effects_json": "{\"type\": \"NET\"}"},
 ]
 
 DEFAULT_PREFS = {
     "output_mode": "human",
     "auto_sell_trash": False,
     "tutorial_mode": True,
-    "reminders": True
+    "reminders": True,
+    "memo_target": "grid",
+    "briefings_enabled": True
 }

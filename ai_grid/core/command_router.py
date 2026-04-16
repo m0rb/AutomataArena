@@ -32,6 +32,9 @@ class CommandRouter:
                     asyncio.create_task(handlers.handle_grid_map(self.node, source_nick, reply_target))
                 elif args and args[0].lower() == "claimed":
                     asyncio.create_task(handlers.handle_grid_claimed(self.node, source_nick, args, reply_target))
+                elif args and args[0].lower() in ["probe", "install", "bolster", "link", "siphon"]:
+                    # !a grid <action> <args>
+                    asyncio.create_task(handlers.handle_grid_command(self.node, source_nick, reply_target, args[0].lower(), args[1:]))
                 else:
                     asyncio.create_task(handlers.handle_grid_view(self.node, source_nick, reply_target))
             elif verb == "move":
@@ -58,13 +61,18 @@ class CommandRouter:
                 asyncio.create_task(handlers.handle_training(self.node, source_nick, reply_target))
 
             # 4. Grid Interaction (Claim, Upgrade, etc.)
-            elif verb in ["claim", "upgrade", "repair", "recharge", "raid", "breach", "hack"]:
+            elif verb in ["claim", "upgrade", "repair", "recharge", "raid", "breach", "hack", "probe", "siphon", "install", "bolster", "link", "net"]:
                 if verb in ["raid", "breach"]:
                     asyncio.create_task(handlers.handle_grid_loot(self.node, source_nick, reply_target))
+                elif verb == "siphon" and args and args[0].lower() == "grid":
+                    # Backward compatibility for !a siphon grid
+                    asyncio.create_task(handlers.handle_grid_command(self.node, source_nick, reply_target, "siphon", args[1:]))
                 else:
-                    asyncio.create_task(handlers.handle_grid_command(self.node, source_nick, reply_target, verb))
-            elif verb == "siphon" and len(args) > 0 and args[0].lower() == "grid":
-                asyncio.create_task(handlers.handle_grid_command(self.node, source_nick, reply_target, "siphon"))
+                    asyncio.create_task(handlers.handle_grid_command(self.node, source_nick, reply_target, verb, args))
+            
+            elif verb == "memos":
+                asyncio.create_task(handlers.handle_memos(self.node, source_nick, args, reply_target))
+
             elif verb == "grid" and len(args) >= 3 and args[0].lower() == "network" and args[1].lower() == "msg":
                 # !a grid network msg <nick> <msg>
                 asyncio.create_task(handlers.handle_grid_network_msg(self.node, source_nick, args, reply_target))

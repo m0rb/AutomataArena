@@ -69,13 +69,17 @@ async def handle_node_explore(node, nick: str, reply_target: str):
     if not await check_rate_limit(node, nick, reply_target, cooldown=45): return
     result = await node.db.explore_node(nick, node.net_name)
     
-    banner = format_text(result['msg'], C_GREEN if result['status'] == 'success' else C_YELLOW)
+    if "error" in result:
+        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(result['error'], C_RED), tags=['ERR', nick])}")
+        return
+
+    banner = format_text(result.get('msg', 'Scanning nodal architecture...'), C_GREEN if result.get('status') == 'success' else C_YELLOW)
     loc = await node.db.get_location(nick, node.net_name)
     loc_name = loc['name'] if loc else None
     await node.send(f"PRIVMSG {reply_target} :{tag_msg(banner, tags=['GEOINT', nick], location=loc_name)}")
     
     # Award XP: 5 for success, 2 for attempt
-    xp_reward = 5 if result['status'] == 'success' else 2
+    xp_reward = 5 if result.get('status') == 'success' else 2
     await node.add_xp(nick, xp_reward, reply_target)
     
     if result.get("danger") == "GRID_BUG_SPAWN":

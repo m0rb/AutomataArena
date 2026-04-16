@@ -174,11 +174,11 @@ async def handle_stats(node, nickname: str, args: list, reply_target: str):
         
         await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'=== [ {nickname.upper()} - ATTRIBUTES ] ===', C_CYAN, bold=True))}")
         stats = [
-            ("CPU", char['cpu'], "Kinetic Striking"),
-            ("RAM", char['ram'], "Health/Shelling"),
-            ("BND", char['bnd'], "Speed/Evasion"),
-            ("SEC", char['sec'], "Security/Mitigation"),
-            ("ALG", char['alg'], "Logical Capability")
+            ("CPU", char['cpu'], "Kinetic Attack/Compute"),
+            ("RAM", char['ram'], "Storage/Compute"),
+            ("BND", char['bnd'], "Speed/Exfiltration"),
+            ("SEC", char['sec'], "Security/Offense/Defense"),
+            ("ALG", char['alg'], "Logic Capability")
         ]
         for name, val, desc in stats:
             await node.send(f"PRIVMSG {reply_target} :{build_banner(f'{format_text(name, C_YELLOW)}: {val} - {format_text(desc, C_WHITE)} ')}")

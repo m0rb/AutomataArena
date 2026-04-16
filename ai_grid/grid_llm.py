@@ -24,7 +24,7 @@ logger.setLevel(log_level)
 formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 # File Handler
-fh = logging.FileHandler('arena_llm.log')
+fh = logging.FileHandler('grid_llm.log')
 fh.setFormatter(formatter)
 logger.addHandler(fh)
 

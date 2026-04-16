@@ -22,7 +22,7 @@ logger.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 if not logger.handlers:
-    fh = logging.FileHandler(os.path.join(BASE_DIR, 'arena_db.log'))
+    fh = logging.FileHandler(os.path.join(BASE_DIR, 'grid_db.log'))
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 

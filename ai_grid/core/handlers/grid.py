@@ -40,7 +40,7 @@ async def handle_grid_view(node, nickname: str, reply_target: str):
         return
     node_icon = {'safezone': '🛡️', 'arena': '⚔️', 'wilderness': '🌿', 'merchant': '💰'}.get(loc['type'], '📡')
     exits_str = " | ".join(loc['exits']) if loc['exits'] else "none"
-    header = format_text(f"[ {node_icon} {loc['name']} ]", C_CYAN, bold=True)
+    header = f"{node_icon} " + format_text(f"[ {loc['name']} ]", C_CYAN, bold=True)
     await node.send(f"PRIVMSG {reply_target} :{tag_msg(header, tags=['GEOINT'], location=loc['name'], is_machine=machine)}")
     await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(loc['description'], C_YELLOW), tags=['GEOINT'], location=loc['name'], is_machine=machine)}")
     node_stats = f"Type: {loc['type'].upper()} | Level: {loc['level']} | Credits: {loc['credits']}c"

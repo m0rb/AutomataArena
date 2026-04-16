@@ -129,6 +129,17 @@ async def handle_options(node, nickname: str, args: list, reply_target: str):
                 await node.send(f"PRIVMSG {reply_target} :{build_banner(f'{l}: {format_text(str(v), C_GREEN if v else C_RED)} ')}")
             await node.send(f"PRIVMSG {reply_target} :{build_banner(format_text(f'Use {node.prefix} options <setting> <value> to change.', C_YELLOW))}")
         return
+    if len(args) == 1:
+        s = args[0].lower()
+        if s in VALID:
+            key, val_map = VALID[s]
+            current = prefs.get(key)
+            allowed = "/".join(val_map.keys())
+            await node.send(f"PRIVMSG {reply_target} :[OPTIONS] {s} is currently: {current}")
+            await node.send(f"PRIVMSG {reply_target} :[SYNTAX] {node.prefix} options {s} <{allowed}>")
+        else:
+            await node.send(f"PRIVMSG {reply_target} :[ERR] Unknown setting '{s}'.")
+        return
     if len(args) < 2:
         await node.send(f"PRIVMSG {reply_target} :[ERR] Syntax: {node.prefix} options <setting> <value>")
         return

@@ -235,7 +235,8 @@ class PlayerRepository:
                     'credits': char.credits,
                     'current_hp': char.current_hp,
                     'max_hp': char.ram * 5,
-                    'data_units': char.data_units
+                    'data_units': char.data_units,
+                    'pending_stat_points': char.pending_stat_points
                 }
             return None
 

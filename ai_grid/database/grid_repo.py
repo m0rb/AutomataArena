@@ -139,15 +139,13 @@ class GridRepository:
             
             node = char.current_node
             if not node.owner_character_id: return False, "You cannot recharge unclaimed wilderness."
-            max_power = node.upgrade_level * 100.0
-            if node.power_stored >= max_power: return False, "Grid power is already at maximum."
             if char.credits < 100.0: return False, "You need 100c to recharge power."
             
             char.credits -= 100.0
-            node.power_stored = max_power
+            node.power_stored += 100.0
             await session.commit()
             
-            return True, f"Grid recharged to MAX ({max_power} uP)."
+            return True, f"Grid recharged. (+100.0 uP) Current Store: {node.power_stored:.1f} uP."
 
     async def claim_node(self, name: str, network: str):
         async with self.async_session() as session:
@@ -336,9 +334,8 @@ class GridRepository:
                 if node.owner_character_id:
                     if occupants > 0:
                         generated = occupants * 5.0
-                        max_power = node.upgrade_level * 100.0
                         node.power_generated += generated
-                        node.power_stored = min(max_power, node.power_stored + generated)
+                        node.power_stored += generated
                         node.durability = min(100.0, node.durability + (occupants * 2.0))
                     else:
                         node.durability -= 5.0

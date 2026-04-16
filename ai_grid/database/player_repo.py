@@ -410,11 +410,10 @@ class PlayerRepository:
             )
             char = (await session.execute(stmt)).scalars().first()
             if not char: return False, "System offline."
-            if char.power >= 100.0: return False, "Power at maximum capacity."
             
             p_gain = 10.0
             if p_gain > 0:
-                char.power = min(100.0, char.power + p_gain)
+                char.power += p_gain
                 await increment_daily_task(session, char, "Claim a Node") 
                 
             await session.commit()
@@ -499,11 +498,11 @@ async def increment_daily_task(session, char, task_key):
                     
                     if is_safe:
                         # Recover 5% Power and 2% Stability per hour
-                        char.power = min(100.0, char.power + 5.0)
+                        char.power += 5.0
                         char.stability = min(100.0, char.stability + 2.0)
                     else:
                         # Recover 2% Power, 0.5% Stability in wilderness
-                        char.power = min(100.0, char.power + 2.0)
+                        char.power += 2.0
                         char.stability = min(100.0, char.stability + 0.5)
             
             await session.commit()

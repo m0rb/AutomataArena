@@ -93,8 +93,7 @@ async def handle_info_view(node, nickname: str, args: list, reply_target: str):
 
 async def handle_tasks_view(node, nickname: str, reply_target: str):
     tasks_json = await node.db.get_daily_tasks(nickname, node.net_name)
-    try: tasks = json.loads(tasks_json)
-    except: tasks = {}
+    tasks = json.loads(tasks_json)
     machine = await is_machine_mode(node, nickname)
     if machine:
         parts = " ".join(f"[{k}:{v}]" for k, v in tasks.items() if k not in ["date", "completed"])
@@ -176,20 +175,21 @@ async def handle_options(node, nickname: str, args: list, reply_target: str):
 
 async def handle_stats(node, nickname: str, args: list, reply_target: str):
     """View and allocate stat points."""
+    machine = await is_machine_mode(node, nickname)
     if not args:
         char = await node.db.get_fighter(nickname, node.net_name)
         if not char: return
         
         await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(f'=== [ {nickname.upper()} - ATTRIBUTES ] ===', C_CYAN, bold=True), tags=['HUMINT', nickname], is_machine=machine)}")
         stats = [
-            ("CPU", char['cpu'], "Kinetic Attack/Compute"),
-            ("RAM", char['ram'], "Storage/Compute"),
-            ("BND", char['bnd'], "Speed/Exfiltration"),
-            ("SEC", char['sec'], "Security/Offense/Defense"),
-            ("ALG", char['alg'], "Logic Capability")
+            (ICONS['CPU'], "CPU", char['cpu'], "Kinetic Attack/Compute"),
+            (ICONS['RAM'], "RAM", char['ram'], "Storage/Compute"),
+            (ICONS['BND'], "BND", char['bnd'], "Speed/Exfiltration"),
+            (ICONS['SEC'], "SEC", char['sec'], "Security/Offense/Defense"),
+            (ICONS['ALG'], "ALG", char['alg'], "Logic Capability")
         ]
-        for name, val, desc in stats:
-            await node.send(f"PRIVMSG {reply_target} :{tag_msg(f'{format_text(name, C_YELLOW, is_machine=machine)}: {val} - {format_text(desc, C_WHITE, is_machine=machine)} ', tags=['HUMINT'], is_machine=machine)}")
+        for ico, name, val, desc in stats:
+            await node.send(f"PRIVMSG {reply_target} :{tag_msg(f'{ico} {format_text(name, C_YELLOW, is_machine=machine)}: {val} - {format_text(desc, C_WHITE, is_machine=machine)} ', tags=['HUMINT'], is_machine=machine)}")
         
         if char['pending_stat_points'] > 0:
             pending = char['pending_stat_points']

@@ -66,11 +66,11 @@ ICONS = {
     'Item': '📦',
     'Heal': '💉',
     # Attribute Icons
-    'CPU': '🧮',
-    'RAM': '💾',
-    'BND': '⚡',
+    'CPU': '💻',
+    'RAM': '🧠',
+    'BND': '📶',
     'SEC': '🛡️',
-    'ALG': '🧠',
+    'ALG': '⚙️',
     # Economy & Territory
     'POWER': '🔋',
     'CREDITS': '💳',

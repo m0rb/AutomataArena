@@ -9,8 +9,8 @@ This document tracks active or upcoming, near-term tasks for the Automata Grid.
 - [ ] **Graphical Map** (Web-based topological visualization for dash)
 - [ ] **Dynamic Combat Flavor Text** (LLM-driven procedural battle reporting)
 - [ ] **Spectator Item Drops** (Interactive drops/interactions during active matches)
-- [ ] **Interactive Spectators** (In-IRC gambling and signal-driven drops)
-- [ ] **Community Rebranding** (Players/Spectators pay credits to rename grid nodes)
+- [ ] **Interactive Spectators** (In-IRC arena gambling
+- [ ] **Community Renaming** (Players/Spectators pay credits to rename grid nodes)
 
 ## ✅ Completed Tasks
 

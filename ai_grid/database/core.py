@@ -94,3 +94,38 @@ DEFAULT_PREFS = {
     "memo_target": "grid",
     "briefings_enabled": True
 }
+async def increment_daily_task(session, char, task_key):
+    import datetime
+    import json
+    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    
+    try: tasks = json.loads(char.daily_tasks)
+    except: tasks = {}
+    
+    if tasks.get("date") != today:
+        tasks = {
+            "date": today,
+            "Claim a Node": 0,
+            "Defend a Node": 0,
+            "Hack a Player": 0,
+            "Repair a Node": 0,
+            "Kill a Grid Bug": 0,
+            "Queue in Arena": 0,
+            "completed": False
+        }
+        
+    if tasks.get("completed"): return None
+
+    if task_key in tasks and tasks[task_key] < 1:
+        tasks[task_key] += 1
+        
+    completed_count = sum(1 for k, v in tasks.items() if k not in ["date", "completed"] and v >= 1)
+    reward_msg = None
+    
+    if completed_count >= 3 and not tasks.get("completed"):
+        tasks["completed"] = True
+        char.credits += 500.0
+        reward_msg = f"[SIGACT] 🏆 {char.name} completed 3 Daily Tasks and earned a 500c bonus!"
+        
+    char.daily_tasks = json.dumps(tasks)
+    return reward_msg

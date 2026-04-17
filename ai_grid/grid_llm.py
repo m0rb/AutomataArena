@@ -7,6 +7,7 @@ import urllib.request
 import urllib.error
 import logging
 import sys
+from typing import List, Dict
 
 # --- Config & Logging Setup ---
 try:
@@ -146,7 +147,7 @@ class ArenaLLM:
             return "Datastream corrupted. Cannot parse news feed at this time."
         return raw
 
-    async def generate_grid_nodes(self, count: int) -> list[dict]:
+    async def generate_grid_nodes(self, count: int) -> List[Dict]:
         """Generates procedural grid nodes with one-word names."""
         logger.info(f"Requesting procedural generation of {count} nodes.")
         system = (

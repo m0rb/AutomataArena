@@ -7,8 +7,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import func
 from models import Character, Player, NetworkAlias, GridNode, NodeConnection, DiscoveryRecord, BreachRecord
 from core.security_utils import is_action_hostile, get_security_dc_multiplier
-from .core import logger, CONFIG
-from .player_repo import increment_daily_task
+from .core import logger, CONFIG, increment_daily_task
 
 class GridRepository:
     def __init__(self, async_session):

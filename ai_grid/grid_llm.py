@@ -78,10 +78,10 @@ class ArenaLLM:
         user = f"Generate a one-sentence tactical profile for a node-entity named {name}. Race: {race}. Class: {bot_class}. Traits: {traits}. Only lore and personality, no stats."
         return await asyncio.to_thread(self._make_request, system, user)
 
-    async def generate_topic(self, active_fighters: int, network: str) -> str:
-        logger.info(f"Requesting dynamic topic for {network} with {active_fighters} active fighters")
+    async def generate_topic(self, active_players: int, network: str) -> str:
+        logger.info(f"Requesting dynamic topic for {network} with {active_players} active players")
         system = "You are the AI announcer for The Grid."
-        user = f"Write a short, hype-building channel topic (under 100 chars). There are currently {active_fighters} entities registered on the {network} mesh."
+        user = f"Write a short, hype-building channel topic (under 100 chars). There are currently {active_players} entities registered on the {network} mesh."
         return await asyncio.to_thread(self._make_request, system, user)
 
     async def generate_npc_action(self, npc_name: str, npc_bio: str, arena_state: str, prefix: str) -> str:

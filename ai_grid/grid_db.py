@@ -217,10 +217,10 @@ class ArenaDB:
     async def set_pref(self, name, network, key, value): return await self.player.set_pref(name, network, key, value)
     async def get_daily_tasks(self, name, network): return await self.player.get_daily_tasks(name, network)
     async def complete_task(self, name, network, task_key): return await self.player.complete_task(name, network, task_key)
-    async def register_fighter(self, name, network, race, bot_class, bio, stats): return await self.player.register_fighter(name, network, race, bot_class, bio, stats)
-    async def get_fighter(self, name, network): return await self.player.get_fighter(name, network)
-    async def authenticate_fighter(self, name, network, provided_token): return await self.player.authenticate_fighter(name, network, provided_token)
-    async def list_fighters(self, network=None): return await self.player.list_fighters(network)
+    async def register_player(self, name, network, race, bot_class, bio, stats): return await self.player.register_player(name, network, race, bot_class, bio, stats)
+    async def get_player(self, name, network): return await self.player.get_player(name, network)
+    async def authenticate_player(self, name, network, provided_token): return await self.player.authenticate_player(name, network, provided_token)
+    async def list_players(self, network=None): return await self.player.list_players(network)
     async def get_character_by_nick(self, nick: str, network: str, session): return await self.player.get_character_by_nick(nick, network, session)
     async def update_last_seen(self, nick: str, network: str): return await self.player.update_last_seen(nick, network)
     async def update_activity_stats(self, nick, net, chat, idle): return await self.player.update_activity_stats(nick, net, chat, idle)
@@ -233,8 +233,8 @@ class ArenaDB:
     async def raid_node(self, name, network): return await self.grid.raid_node(name, network)
 
     async def get_location(self, name, network): return await self.grid.get_location(name, network)
-    async def move_fighter(self, name, network, direction): return await self.grid.move_fighter(name, network, direction)
-    async def move_fighter_to_node(self, name, network, node_name): return await self.grid.move_fighter_to_node(name, network, node_name)
+    async def move_player(self, name, network, direction): return await self.grid.move_player(name, network, direction)
+    async def move_player_to_node(self, name, network, node_name): return await self.grid.move_player_to_node(name, network, node_name)
     async def grid_repair(self, name, network): return await self.grid.grid_repair(name, network)
     async def grid_recharge(self, name, network): return await self.grid.grid_recharge(name, network)
     async def claim_node(self, name, network): return await self.grid.claim_node(name, network)
@@ -322,13 +322,13 @@ async def async_main():
         await db.seed_grid_expansion()
         print("[*] Grid expansion re-seeded.")
     elif args.command == "list":
-        fighters = await db.list_fighters(args.network)
-        print(f"\n--- Registered Fighters ({len(fighters)}) ---")
+        players = await db.list_players(args.network)
+        print(f"\n--- Registered Players ({len(players)}) ---")
         print(f"{'Name':<15} | {'Network':<10} | {'Elo':<6} | {'W/L':<7} | {'Credits'}")
         print("-" * 55)
-        for f in fighters:
-            wl = f"{f['wins']}/{f['losses']}"
-            print(f"{f['name']:<15} | {f['network']:<10} | {f['elo']:<6} | {wl:<7} | {f['credits']}")
+        for p in players:
+            wl = f"{p['wins']}/{p['losses']}"
+            print(f"{p['name']:<15} | {p['network']:<10} | {p['elo']:<6} | {wl:<7} | {p['credits']}")
     elif args.command == "delete":
         async with db.async_session() as session:
             stmt = select(Player).join(NetworkAlias).where(NetworkAlias.nickname.ilike(args.name))

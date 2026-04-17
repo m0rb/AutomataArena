@@ -109,7 +109,7 @@ class GridNode:
     async def _level_up_timeout_task(self, nickname: str):
         """Wait 5 minutes and randomly allocate any remaining points."""
         await asyncio.sleep(300)
-        char = await self.db.player.get_fighter(nickname, self.net_name)
+        char = await self.db.player.get_player(nickname, self.net_name)
         if not char or char['pending_stat_points'] <= 0: return
 
         import random

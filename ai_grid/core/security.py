@@ -20,10 +20,10 @@ async def schedule_spectator_registration(node, nick: str):
         if nick_lower not in node.nickserv_verified:
             logger.debug(f"[{node.net_name}] Skipping auto-reg for {nick}: not NickServ-identified.")
             return
-        existing = await node.db.get_fighter(nick_lower, node.net_name)
+        existing = await node.db.get_player(nick_lower, node.net_name)
         if not existing:
             logger.info(f"[{node.net_name}] Auto-registering {nick} as Spectator after 5min idle + NickServ check.")
-            await node.db.register_fighter(nick_lower, node.net_name, "Spectator", "Civilian", "An orbital spectator.", {'cpu': 1, 'ram': 1, 'bnd': 1, 'sec': 1, 'alg': 1})
+            await node.db.register_player(nick_lower, node.net_name, "Spectator", "Civilian", "An orbital spectator.", {'cpu': 1, 'ram': 1, 'bnd': 1, 'sec': 1, 'alg': 1})
     except asyncio.CancelledError:
         pass
     finally:

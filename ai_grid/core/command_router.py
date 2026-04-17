@@ -127,7 +127,7 @@ class CommandRouter:
                 if enc:
                     enc['timer'].cancel()
                     prev = enc.get('prev_node')
-                    if prev: await self.node.db.move_fighter_to_node(source_nick, self.node.net_name, prev)
+                    if prev: await self.node.db.move_player_to_node(source_nick, self.node.net_name, prev)
                     machine = await handlers.is_machine_mode(self.node, source_nick)
                     if machine: await self.node.send(f"PRIVMSG {source_nick} :[MOB] RESULT:FLED NODE:{prev or 'unknown'}")
                     else:

@@ -174,7 +174,7 @@ class TerritoryRepository(BaseRepository):
             
             addons[addon_type] = True
             node.addons_json = json.dumps(addons)
-            session.delete(inv_item)
+            await session.delete(inv_item)
             await session.commit()
             return {"success": True, "msg": f"Installation Successful: {addon_type} module is now online for {node.name}."}
 

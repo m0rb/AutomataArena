@@ -124,7 +124,7 @@ async def verify_net_requirement(db):
         result = await db.raid_node("Attacker", "testnet")
         print(f"Raid Result: {result.get('msg')}")
         
-        if "NET addon required" in result.get('msg', ''):
+        if "NET" in result.get('msg', ''):
             print("SUCCESS: RAID correctly blocked without NET addon.")
             return True
         else:

@@ -169,6 +169,11 @@ class ItemTemplate(Base):
     is_darknet = Column(Boolean, default=False)
     effects_json = Column(String, default="{}") # e.g., '{"heal": 15}'
 
+    @property
+    def effects_json_dict(self):
+        import json
+        return json.loads(self.effects_json or "{}")
+
 class InventoryItem(Base):
     __tablename__ = 'inventory_items'
     

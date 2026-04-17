@@ -100,7 +100,7 @@ async def handle_auction(node, nick: str, args: list, reply_target: str):
 
 async def handle_market_view(node, nickname: str, reply_target: str):
     """View current global market multipliers."""
-    tactical_target, broadcast_chan, machine = await get_action_routing(node, nickname, reply_target)
+    tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nickname, reply_target)
     
     status = await node.db.get_market_status()
     if not status:

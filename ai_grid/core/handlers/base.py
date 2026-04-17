@@ -6,7 +6,7 @@ from grid_utils import format_text, tag_msg, C_GREEN, C_CYAN, C_RED, C_YELLOW, C
 async def handle_help(node, nick: str, args: list, reply_target: str):
     """Displays a comprehensive list of all v1.6.0 commands or details for a specific verb."""
     
-    tactical_target, broadcast_chan, machine = await get_action_routing(node, nick, reply_target)
+    tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nick, reply_target)
     
     # Detailed Command Registry
     registry = {

@@ -81,7 +81,7 @@ async def handle_node_explore(node, nick: str, reply_target: str):
     from .combat import handle_mob_encounter
     if not await check_rate_limit(node, nick, reply_target, cooldown=45): return
     
-    tactical_target, broadcast_chan, machine = await get_action_routing(node, nick, reply_target)
+    tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nick, reply_target)
     
     result = await node.db.explore_node(nick, node.net_name)
     
@@ -263,7 +263,7 @@ async def handle_grid_command(node, nickname: str, reply_target: str, action: st
 async def handle_grid_loot(node, nick: str, reply_target: str):
     if not await check_rate_limit(node, nick, reply_target, cooldown=60): return
     
-    tactical_target, broadcast_chan, machine = await get_action_routing(node, nick, reply_target)
+    tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nick, reply_target)
     
     result = await node.db.raid_node(nick, node.net_name)
     

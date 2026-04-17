@@ -35,7 +35,7 @@ async def handle_registration(node, nick: str, args: list, reply_target: str):
 async def handle_info_view(node, nickname: str, args: list, reply_target: str):
     target = args[0].lower() if args else nickname.lower()
     
-    tactical_target, broadcast_chan, machine = await get_action_routing(node, nickname, reply_target)
+    tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nickname, reply_target)
     
     if target == "grid":
         loc = await node.db.get_location(nickname, node.net_name)
@@ -97,7 +97,7 @@ async def handle_tasks_view(node, nickname: str, reply_target: str):
     tasks_json = await node.db.get_daily_tasks(nickname, node.net_name)
     tasks = json.loads(tasks_json)
     
-    tactical_target, broadcast_chan, machine = await get_action_routing(node, nickname, reply_target)
+    tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nickname, reply_target)
     
     if machine:
         parts = " ".join(f"[{k}:{v}]" for k, v in tasks.items() if k not in ["date", "completed"])
@@ -182,7 +182,7 @@ async def handle_options(node, nickname: str, args: list, reply_target: str):
 
 async def handle_stats(node, nickname: str, args: list, reply_target: str):
     """View and allocate stat points."""
-    tactical_target, broadcast_chan, machine = await get_action_routing(node, nickname, reply_target)
+    tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nickname, reply_target)
     
     if not args:
         char = await node.db.get_player(nickname, node.net_name)

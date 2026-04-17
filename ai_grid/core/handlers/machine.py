@@ -107,7 +107,7 @@ async def handle_item_use(node, nick: str, args: list, reply_target: str):
         return
     
     item_name = " ".join(args)
-    tactical_target, broadcast_chan, machine = await get_action_routing(node, nick, reply_target)
+    tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nick, reply_target)
     
     result, msg = await node.db.use_item(nick, node.net_name, item_name)
     banner = format_text(msg, C_GREEN if result else C_RED)

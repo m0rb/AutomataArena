@@ -100,7 +100,7 @@ async def handle_ready(node, nick: str, token: str, reply_target: str):
 
 async def handle_dice_roll(node, nick: str, args: list, reply_target: str):
     """Play a game of 2d6 dice."""
-    tactical_target, broadcast_chan, machine = await get_action_routing(node, nick, reply_target)
+    tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nick, reply_target)
     
     if len(args) < 2:
         await node.send(f"PRIVMSG {tactical_target} :Usage: {node.prefix} dice <bet> <high|low|seven>")
@@ -147,7 +147,7 @@ async def handle_guess(node, nick: str, args: list, reply_target: str):
 
 async def handle_leaderboard(node, nick: str, args: list, reply_target: str):
     """Show global high scores."""
-    tactical_target, broadcast_chan, machine = await get_action_routing(node, nick, reply_target)
+    tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nick, reply_target)
     cat = args[0].upper() if args else "DICE"
     results = await node.db.get_leaderboard(cat)
     if not results:

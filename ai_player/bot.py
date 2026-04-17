@@ -15,7 +15,7 @@ config.read('config.ini')
 
 IRC_SERVER = config['IRC']['Server']
 IRC_PORT = int(config['IRC']['Port'])
-IRC_PASSWD = config['IRC']['Server']
+IRC_PASSWD = config['IRC']['Password']
 USE_SSL = config['IRC'].getboolean('UseSSL')
 VERIFY_SSL = config['IRC'].getboolean('VerifySSL')
 NICK = config['IRC']['Nickname']

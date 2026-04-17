@@ -14,7 +14,7 @@ async def handle_admin_command(node, admin_nick: str, verb: str, args: list, rep
         if not args:
             # Landing Page
             await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text('[ MAINFRAME ADMIN OVERRIDES ]', C_CYAN, True), tags=['SIGINT'])}")
-            cmds = ["status", "version", "topic", "broadcast <msg>", "grid rename <old> <new>", "battlestart/stop", "restart", "stop", "shutdown"]
+            cmds = ["status", "version", "topic", "broadcast <msg>", "grid <rename|chgdesc|seed|spawn>", "battlestart/stop", "restart", "stop", "shutdown"]
             cmd_str = ", ".join([f"{node.prefix} admin {c}" for c in cmds])
             await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(cmd_str, C_WHITE), tags=['SIGINT'])}")
             return
@@ -108,7 +108,14 @@ async def handle_admin_command(node, admin_nick: str, verb: str, args: list, rep
             
             feedback = f"Expansion complete. Synced {added_count} new sectors to the mesh."
             await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(feedback, C_GREEN), tags=['SIGINT'])}")
-            
+        elif len(full_args) >= 3 and full_args[0].lower() == "chgdesc":
+            target_node, new_desc = full_args[1], full_args[2]
+            success, feedback = await node.db.grid.update_node_description(target_node, new_desc)
+            tag = "SIGINT" if success else "OSINT"
+            await node.send(f"PRIVMSG {reply_target} :{tag_msg(feedback, tags=[tag])}")
+            if success:
+                announcement = format_text(f"NODE ARCHITECTURE REDEFINED: {target_node} sensors updated.", C_CYAN, True)
+                await node.send(f"PRIVMSG {node.config['channel']} :{tag_msg(announcement, tags=['SIGACT'])}")
         elif full_args[0].lower() == "spawn":
             if len(full_args) >= 2:
                 target_node = full_args[1]
@@ -121,7 +128,8 @@ async def handle_admin_command(node, admin_nick: str, verb: str, args: list, rep
         else:
             await node.send(f"PRIVMSG {reply_target} :[ERR] Syntax: {node.prefix} admin grid <rename|seed|spawn> [args]")
     elif verb == "restart":
-        await node.send(f"PRIVMSG {node.config['channel']} :{tag_msg(format_text('MAINFRAME RESTART INITIATED BY ADMIN.', C_YELLOW, True), tags=['SIGACT'])}")
+        msg = tag_msg(format_text('MAINFRAME RESTART INITIATED BY ADMIN.', C_YELLOW, True), tags=['SIGACT'])
+        await node.send(f"PRIVMSG {node.config['channel']} :{msg}", immediate=True)
         if node.active_engine: node.active_engine.active = False
         await asyncio.sleep(1)
         await node.hub.restart()

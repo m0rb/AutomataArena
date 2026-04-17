@@ -840,3 +840,16 @@ class GridRepository:
             await session.commit()
             logger.info(f"GRID_RENAME: {old_display} -> {new_name}")
             return True, f"Operation successful: {old_display} rebranded to {new_name}."
+
+    async def update_node_description(self, node_name: str, new_desc: str) -> tuple[bool, str]:
+        """Admin-only: Updates a node's description."""
+        async with self.async_session() as session:
+            node = (await session.execute(
+                select(GridNode).where(func.lower(GridNode.name) == node_name.lower())
+            )).scalars().first()
+            if not node:
+                return False, f"Target node '{node_name}' not found."
+            
+            node.description = new_desc
+            await session.commit()
+            return True, f"Operation successful: Node '{node.name}' architecture redefined."

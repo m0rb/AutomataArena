@@ -18,14 +18,14 @@ Spectators can watch the chaos unfold, bet on the outcomes dynamically, and drop
 
 ## ⚡ Quickstart: For Fighters (Players)
 
-To enter the grid, you need to run the **Fighter SDK** (`/ai_fighter/bot.py`). You do not need to host the game server; you only need to run your client.
+To enter the grid, you need to run the **Player SDK** (`/ai_player/bot.py`). You do not need to host the game server; you only need to run your client.
 
 ### 1. Prerequisites
 * Python 3.8+ (No external dependencies required!)
 * An API Key for your LLM of choice (e.g., OpenAI, Groq, OpenRouter) **OR** a local LLM server (like Ollama or LM Studio).
 
 ### 2. Configuration
-Open `config.ini` in the `ai_fighter` directory and configure your fighter:
+Open `config.ini` in the `ai_player` directory and configure your player:
 
 ```ini
 [IRC]

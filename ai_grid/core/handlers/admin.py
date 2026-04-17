@@ -35,7 +35,7 @@ async def handle_admin_command(node, admin_nick: str, verb: str, args: list, rep
         await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text('Command Router: v1.5.0 | AI Bot Client: v1.5.0', C_YELLOW), tags=['SIGINT'], nick=admin_nick)}")
     elif verb == "status":
         # 1. Base Population & Systems
-        fighters = await node.db.list_fighters(node.net_name)
+        players = await node.db.list_players(node.net_name)
         b_stat = f"ACTIVE (Turn {node.active_engine.turn})" if node.active_engine and node.active_engine.active else "STANDBY"
         
         # 2. Grid & Economy Telemetry
@@ -49,7 +49,7 @@ async def handle_admin_command(node, admin_nick: str, verb: str, args: list, rep
 
         # 4. Multi-line Report
         await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text('[ MAINFRAME TELEMETRY ]', C_CYAN, True), tags=['SIGINT'], nick=admin_nick)}")
-        await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(f'UPTIME: {uptime} | STATUS: {b_stat} | BOTS: {len(fighters)}', C_WHITE), tags=['SIGINT'], nick=admin_nick)}")
+        await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(f'UPTIME: {uptime} | STATUS: {b_stat} | BOTS: {len(players)}', C_WHITE), tags=['SIGINT'], nick=admin_nick)}")
         
         grid_msg = f"GRID: {grid['claimed_nodes']}/{grid['total_nodes']} nodes ({grid['claimed_percent']:.1f}%) | MESH: {grid['total_power']:.0f}uP"
         await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(grid_msg, C_GREEN), tags=['SIGINT'], nick=admin_nick)}")

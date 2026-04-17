@@ -53,7 +53,7 @@ class EconomyRepository:
             )
             result = await session.execute(stmt)
             char = result.scalars().first()
-            if not char: return False, "System offline: Fighter not found."
+            if not char: return False, "System offline: Player not found."
             
             # Availability Check: Owner bypass
             if char.current_node.availability_mode == "CLOSED" and char.current_node.owner_character_id != char.id:

@@ -9,8 +9,8 @@ from grid_combat import CombatEngine, Entity
 logger = logging.getLogger("manager")
 
 async def set_dynamic_topic(node):
-    fighters = await node.db.list_fighters(node.net_name)
-    node.registered_bots = len(fighters)
+    players = await node.db.list_players(node.net_name)
+    node.registered_bots = len(players)
     raw_topic = await node.llm.generate_topic(node.registered_bots, node.net_name)
     fmt_topic = f"{ICONS['ARENA']} {format_text('THE GRID', C_CYAN, bold=True)} | {raw_topic} | {ICONS['CROSS-GRID']} Cross-Grid Active"
     await node.send(f"TOPIC {node.config['channel']} :{fmt_topic}")
@@ -22,7 +22,7 @@ async def trigger_arena_call(node):
 
 async def check_match_start(node):
     if len(node.ready_players) > 0 and not node.active_engine and not node.pve_task:
-        # A 1-minute grace period begins as soon as the first fighter readies
+        # A 1-minute grace period begins as soon as the first player readies
         await node.send(f"PRIVMSG {node.config['channel']} :{tag_msg('Match initialization sequence started. 60 seconds until combat drop...', tags=['ARENA', 'SIGACT'])}")
         node.pve_task = asyncio.create_task(pve_countdown(node))
 
@@ -76,7 +76,7 @@ async def start_match(node, match_id: str, participants: list, pve=False):
 
     node.active_engine = CombatEngine(match_id, node.prefix, combat_broadcast)
     for name in participants:
-        db_stats = await node.db.get_fighter(name, node.net_name)
+        db_stats = await node.db.get_player(name, node.net_name)
         node.active_engine.add_entity(Entity(name, db_stats))
 
     if pve:

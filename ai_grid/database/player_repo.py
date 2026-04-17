@@ -169,8 +169,8 @@ class PlayerRepository:
             await session.commit()
             return reward_msg
 
-    async def register_fighter(self, name: str, network: str, race: str, bot_class: str, bio: str, stats: dict):
-        reg_type = "Spectator" if race == "Spectator" else "Fighter"
+    async def register_player(self, name: str, network: str, race: str, bot_class: str, bio: str, stats: dict):
+        reg_type = "Spectator" if race == "Spectator" else "Player"
         logger.info(f"Attempting to register {reg_type}: {name} on {network}")
         auth_token = str(uuid.uuid4())
         
@@ -205,7 +205,7 @@ class PlayerRepository:
                     await session.commit()
                     return existing.auth_token
                 else:
-                    logger.warning(f"Registration failed: Fighter '{name}' already exists.")
+                    logger.warning(f"Registration failed: Player '{name}' already exists.")
                     return None
             
             stmt_node = select(GridNode).where(GridNode.is_spawn_node == True)
@@ -243,7 +243,7 @@ class PlayerRepository:
             await session.commit()
             return auth_token
 
-    async def get_fighter(self, name: str, network: str):
+    async def get_player(self, name: str, network: str):
         async with self.async_session() as session:
             name_lower = name.lower()
             stmt = select(Character).join(Player).join(NetworkAlias).where(
@@ -299,7 +299,7 @@ class PlayerRepository:
                 }
             return None
 
-    async def authenticate_fighter(self, name: str, network: str, provided_token: str):
+    async def authenticate_player(self, name: str, network: str, provided_token: str):
         async with self.async_session() as session:
             name_lower = name.lower()
             stmt = select(Character).join(Player).join(NetworkAlias).where(
@@ -313,7 +313,7 @@ class PlayerRepository:
                 return True
             return False
 
-    async def list_fighters(self, network=None):
+    async def list_players(self, network=None):
         async with self.async_session() as session:
             stmt = select(Character, NetworkAlias).select_from(Character).join(Player).join(NetworkAlias)
             if network:
@@ -321,9 +321,9 @@ class PlayerRepository:
             stmt = stmt.order_by(Character.elo.desc())
             
             result = await session.execute(stmt)
-            fighters = []
+            players = []
             for char, alias in result:
-                fighters.append({
+                players.append({
                     'name': char.name,
                     'network': alias.network_name,
                     'elo': char.elo,
@@ -331,7 +331,7 @@ class PlayerRepository:
                     'losses': char.losses,
                     'credits': char.credits
                 })
-            return fighters
+            return players
 
     async def get_character_by_nick(self, nick: str, network: str, session) -> Character:
         """Retrieve a full Character model within a given session."""

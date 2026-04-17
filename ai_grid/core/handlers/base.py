@@ -6,7 +6,7 @@ from grid_utils import format_text, tag_msg, C_GREEN, C_CYAN, C_RED, C_YELLOW, C
 async def handle_help(node, nick: str, args: list, reply_target: str):
     """Displays a comprehensive list of all v1.6.0 commands or details for a specific verb."""
     
-    tactical_target, broadcast_chan, machine, tactical_cmd = await get_action_routing(node, nick, reply_target)
+    tactical_target, broadcast_chan, machine = await get_action_routing(node, nick, reply_target)
     
     # Detailed Command Registry
     registry = {
@@ -56,55 +56,33 @@ async def handle_help(node, nick: str, args: list, reply_target: str):
         verb = args[0].lower()
         if verb in registry:
             info = registry[verb]
-            if machine:
-                # Machine Mode: Structured KV
-                cost_part = f"|COST={info['cost']}" if 'cost' in info else ""
-                kv_str = f"HELP:CMD={verb.upper()}|DESC={info['desc']}|SYNTAX={node.prefix} {info['syntax']}{cost_part}"
-                if verb == "map":
-                    kv_str += "|STATS_REQ=SEC+ALG|TIERS=20:R2,40:R3,60:R4"
-                await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(kv_str, tags=['OSINT'], is_machine=True)}")
-            else:
-                # Human Mode: Rich aesthetic
-                await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(f'[ COMMAND: {verb.upper()} ]', C_CYAN, True), tags=['OSINT'])}")
-                await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text('DESCRIPTION: ', C_YELLOW) + format_text(info['desc'], C_WHITE), tags=['OSINT'])}")
-                syntax_str = f"{node.prefix} {info['syntax']}"
-                await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text('SYNTAX: ', C_YELLOW) + format_text(syntax_str, C_GREEN), tags=['OSINT'])}")
-                
-                if verb == "map":
-                    await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text('INTEL SCALING: Radius scales with SEC+ALG stats.', C_YELLOW), tags=['OSINT'])}")
-                    await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(' - Radius 1: < 20 | Radius 2: 20-39', C_WHITE), tags=['OSINT'])}")
-                    await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(' - Radius 3 (TACTICAL): 40-59', C_WHITE), tags=['OSINT'])}")
-                    await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(' - Radius 4 (DEEP SCAN): 60+', C_WHITE), tags=['OSINT'])}")
-
-                if 'cost' in info:
-                    await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text('COST: ', C_YELLOW) + format_text(info['cost'], C_RED), tags=['OSINT'])}")
+            await node.send(f"PRIVMSG {tactical_target} :{tag_msg(format_text(f'[ COMMAND: {verb.upper()} ]', C_CYAN, True), tags=['OSINT'])}")
+            await node.send(f"PRIVMSG {tactical_target} :{tag_msg(format_text('DESCRIPTION: ', C_YELLOW) + format_text(info['desc'], C_WHITE), tags=['OSINT'])}")
+            syntax_str = f"{node.prefix} {info['syntax']}"
+            await node.send(f"PRIVMSG {tactical_target} :{tag_msg(format_text('SYNTAX: ', C_YELLOW) + format_text(syntax_str, C_GREEN), tags=['OSINT'])}")
+            if 'cost' in info:
+                await node.send(f"PRIVMSG {tactical_target} :{tag_msg(format_text('COST: ', C_YELLOW) + format_text(info['cost'], C_RED), tags=['OSINT'])}")
             return
         else:
-            await node.send(f"{tactical_cmd} {tactical_target} :[ERR] Command '{verb}' not found in registry.")
+            await node.send(f"PRIVMSG {tactical_target} :[ERR] Command '{verb}' not found in registry.")
         return
 
     # Generic Categorical Help
     help_categories = {
-        "NAVIGATION": ["grid", "move", "explore", "map", "flee"],
-        "IDENTITY": ["register", "info", "tasks", "options", "spectator", "news"],
-        "ECONOMY": ["shop", "buy/sell", "auction", "market"],
-        "THE_GIBSON": ["mainframe", "compile", "assemble", "use"],
-        "TACTICAL": ["claim", "upgrade", "hack/raid", "repair", "siphon", "powergen", "train"],
-        "GAMES": ["cipher/guess", "dice", "top", "attack/rob", "queue/ready", "engage"]
+        "🧭 NAVIGATION": ["grid", "move", "explore", "map", "flee"],
+        "🆔 IDENTITY": ["register", "info", "tasks", "options", "spectator", "news"],
+        "💰 ECONOMY": ["shop", "buy/sell", "auction", "market"],
+        "🏗️ THE GIBSON": ["mainframe", "compile", "assemble", "use"],
+        "⚔️ TACTICAL": ["claim", "upgrade", "hack/raid", "repair", "siphon", "powergen", "train"],
+        "🎮 GAMES": ["cipher/guess", "dice", "top", "attack/rob", "queue/ready", "engage"]
     }
 
-    if machine:
-        for cat, cmds in help_categories.items():
-            cmd_list = ",".join(cmds)
-            await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(f'HELP_CAT:{cat}|CMDS={cmd_list}', tags=['OSINT'], is_machine=True)}")
-    else:
-        await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text('[ THE GRID v1.6.0 - COMMAND INTERFACE ]', C_CYAN, bold=True), tags=['OSINT'])}")
-        icons = {"NAVIGATION": "🧭 ", "IDENTITY": "🆔 ", "ECONOMY": "💰 ", "THE_GIBSON": "🏗️ ", "TACTICAL": "⚔️ ", "GAMES": "🎮 "}
-        for cat, cmds in help_categories.items():
-            icon = icons.get(cat, "")
-            cmd_str = ", ".join([f"{node.prefix} {c}" for c in cmds])
-            await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(f'{icon}{cat}', C_YELLOW) + ': ' + format_text(cmd_str, C_WHITE), tags=['OSINT'])}")
-        await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(f'Type {node.prefix} help <command> for detailed syntax.', C_CYAN), tags=['OSINT'])}")
+    await node.send(f"PRIVMSG {tactical_target} :{tag_msg(format_text('[ THE GRID v1.6.0 - COMMAND INTERFACE ]', C_CYAN, bold=True), tags=['OSINT'])}")
+    for cat, cmds in help_categories.items():
+        cmd_str = ", ".join([f"{node.prefix} {c}" for c in cmds])
+        await node.send(f"PRIVMSG {tactical_target} :{tag_msg(format_text(cat, C_YELLOW) + ': ' + format_text(cmd_str, C_WHITE), tags=['OSINT'])}")
+
+    await node.send(f"PRIVMSG {tactical_target} :{tag_msg(format_text(f'Type {node.prefix} help <command> for detailed syntax.', C_CYAN), tags=['OSINT'])}")
 
 async def is_machine_mode(node, nick: str) -> bool:
     prefs = await node.db.get_prefs(nick, node.net_name)
@@ -121,9 +99,9 @@ async def check_rate_limit(node, nick: str, reply_target: str, cooldown: int = 2
     if elapsed < cooldown:
         if not record['warned']:
             record['warned'] = True
-            tactical_target, broadcast_chan, machine, tactical_cmd = await get_action_routing(node, nick, reply_target)
+            tactical_target, broadcast_chan, machine = await get_action_routing(node, nick, reply_target)
             msg = format_text(f"Anti-flood MCP triggered. Please wait {cooldown:.1f}s between commands.", C_RED)
-            asyncio.create_task(node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(msg, tags=['SIGACT', nick])}"))
+            asyncio.create_task(node.send(f"PRIVMSG {tactical_target} :{tag_msg(msg, tags=['SIGACT', nick])}"))
         return False
         
     record['last_action'] = now
@@ -133,14 +111,17 @@ async def check_rate_limit(node, nick: str, reply_target: str, cooldown: int = 2
 async def get_action_routing(node, nickname: str, current_target: str):
     """
     Returns (tactical_target, broadcast_channel, is_machine, tactical_cmd).
-    Diverts tactical_target to the player's nickname to maintain a clean channel 
-    narrative while delivering detailed technical feedback via the user's preferred 
-    method (PRIVMSG or NOTICE).
+    Diverts tactical_target to the player's nickname if they are in machine mode.
+    tactical_cmd is determined by character preference (PRIVMSG or NOTICE).
     """
     prefs = await node.db.get_prefs(nickname, node.net_name)
     is_machine = prefs.get('output_mode', 'human') == 'machine'
     msg_type = prefs.get('msg_type', 'privmsg').upper() # PRIVMSG or NOTICE
     channel = node.config['channel']
     
-    # Standard: Tactical (personalized) output goes to the user directly
-    return nickname, channel, is_machine, msg_type
+    if is_machine:
+        return nickname, channel, True, msg_type
+    else:
+        # If human, tactical target is the original target (usually the channel)
+        # However, if target is a nick (PM), we respect the original intent
+        return current_target, channel, False, "PRIVMSG"

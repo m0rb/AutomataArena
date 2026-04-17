@@ -8,6 +8,9 @@ logger = logging.getLogger("manager")
 async def handle_powergen(node, nick: str, reply_target: str):
     if not await check_rate_limit(node, nick, reply_target, cooldown=60): return
     success, msg = await node.db.active_powergen(nick, node.net_name)
+    if not success and msg == "System offline.":
+        await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nick} - not a registered player - msg ignored")
+        return
     banner = format_text(msg, C_GREEN if success else C_RED)
     await node.send(f"PRIVMSG {reply_target} :{tag_msg(banner, tags=['MAINT', nick])}")
     if success:
@@ -17,6 +20,9 @@ async def handle_powergen(node, nick: str, reply_target: str):
 async def handle_training(node, nick: str, reply_target: str):
     if not await check_rate_limit(node, nick, reply_target, cooldown=60): return
     success, msg = await node.db.active_training(nick, node.net_name)
+    if not success and msg == "System offline.":
+        await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nick} - not a registered player - msg ignored")
+        return
     banner = format_text(msg, C_GREEN if success else C_RED)
     await node.send(f"PRIVMSG {reply_target} :{tag_msg(banner, tags=['MAINT', nick])}")
     if success:

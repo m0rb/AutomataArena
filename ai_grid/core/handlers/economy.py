@@ -23,6 +23,9 @@ async def handle_shop_view(node, nickname: str, reply_target: str):
 
 async def handle_merchant_tx(node, nickname: str, verb: str, item_name: str, reply_target: str):
     result, msg = await node.db.process_transaction(nickname, node.net_name, verb, item_name)
+    if not result and "System offline" in msg:
+        await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nickname} - not a registered player - msg ignored")
+        return
     banner = format_text(msg, C_GREEN if result else C_RED)
     if reply_target.startswith(('#', '&', '+', '!')):
         await node.send(f"PRIVMSG {reply_target} :{tag_msg(banner, tags=['SIGACT', nickname])}")
@@ -63,6 +66,9 @@ async def handle_auction(node, nick: str, args: list, reply_target: str):
         except: start_bid = 100
         
         success, msg = await node.db.create_auction(nick, node.net_name, item_name, start_bid, 1440)
+        if not success and msg == "Character offline.":
+            await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nick} - not a registered player - msg ignored")
+            return
         await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(msg, C_GREEN if success else C_RED), tags=['SIGACT', nick])}")
         
     elif sub == "bid" and len(args) >= 3:
@@ -75,6 +81,9 @@ async def handle_auction(node, nick: str, args: list, reply_target: str):
             return
             
         success, msg = await node.db.bid_on_auction(nick, node.net_name, aid, amt)
+        if not success and msg == "Character offline.":
+            await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nick} - not a registered player - msg ignored")
+            return
         await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(msg, C_GREEN if success else C_RED), tags=['SIGACT', nick])}")
     else:
         await node.send(f"PRIVMSG {reply_target} :Invalid auction command. Try: list, sell <item> <bid>, or bid <id> <amount>.")

@@ -24,13 +24,15 @@ async def handle_grid_movement(node, nick: str, direction: str, reply_target: st
                 if random.random() < spawn_chance:
                     await handle_mob_encounter(node, nick, node_name, threat, prev_node, reply_target)
     else:
-        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(msg, C_RED), tags=['SIGACT', nick])}")
+        if msg == "System offline.":
+            await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nick} - not a registered player - msg ignored")
+        else:
+            await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(msg, C_RED), tags=['SIGACT', nick])}")
         await handle_grid_view(node, nick, reply_target)
 
 async def handle_grid_view(node, nickname: str, reply_target: str):
-    loc = await node.db.get_location(nickname, node.net_name)
     if not loc:
-        await node.send(f"PRIVMSG {reply_target} :[ERR] Fighter not found.")
+        await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nickname} - not a registered player - msg ignored")
         return
     machine = await is_machine_mode(node, nickname)
     if machine:
@@ -70,7 +72,10 @@ async def handle_node_explore(node, nick: str, reply_target: str):
     result = await node.db.explore_node(nick, node.net_name)
     
     if "error" in result:
-        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(result['error'], C_RED), tags=['ERR', nick])}")
+        if result["error"] == "System offline.":
+            await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nick} - not a registered player - msg ignored")
+        else:
+            await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(result['error'], C_RED), tags=['ERR', nick])}")
         return
 
     banner = format_text(result.get('msg', 'Scanning nodal architecture...'), C_GREEN if result.get('status') == 'success' else C_YELLOW)
@@ -96,7 +101,7 @@ async def handle_grid_map(node, nick: str, reply_target: str):
         # Get character for stats
         char = await node.db.get_character_by_nick(nick, node.net_name, session)
         if not char:
-            await node.send(f"PRIVMSG {reply_target} :[ERR] Persona offline.")
+            await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nick} - not a registered player - msg ignored")
             return
         
         machine = await is_machine_mode(node, nick)
@@ -192,6 +197,9 @@ async def handle_grid_command(node, nickname: str, reply_target: str, action: st
     else:
         return # Unknown activity
 
+    if not success and msg == "System offline.":
+        await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nickname} - not a registered player - msg ignored")
+        return
     await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(msg, C_GREEN if success else C_RED), tags=['SIGACT', nickname])}")
     
     if success and action in ["claim", "upgrade", "hack", "repair", "install", "net"]:
@@ -215,8 +223,9 @@ async def handle_grid_command(node, nickname: str, reply_target: str, action: st
 
 async def handle_grid_loot(node, nick: str, reply_target: str):
     if not await check_rate_limit(node, nick, reply_target, cooldown=60): return
-    result = await node.db.raid_node(nick, node.net_name)
-    
+    if not result['success'] and result['msg'] == "System offline.":
+        await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nick} - not a registered player - msg ignored")
+        return
     banner = format_text(result['msg'], C_GREEN if result['success'] else C_RED)
     await node.send(f"PRIVMSG {reply_target} :{tag_msg(banner, tags=['SIGACT', nick])}")
     

@@ -96,7 +96,7 @@ async def check_rate_limit(node, nick: str, reply_target: str, cooldown: int = 2
     if elapsed < cooldown:
         if not record['warned']:
             record['warned'] = True
-            msg = format_text(f"Anti-flood ICE triggered. Please wait {cooldown:.1f}s between commands.", C_RED)
+            msg = format_text(f"Anti-flood MCP triggered. Please wait {cooldown:.1f}s between commands.", C_RED)
             asyncio.create_task(node.send(f"PRIVMSG {reply_target} :{tag_msg(msg, tags=['SIGACT', nick])}"))
         return False
         

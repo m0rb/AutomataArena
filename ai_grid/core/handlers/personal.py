@@ -48,7 +48,7 @@ async def handle_info_view(node, nickname: str, args: list, reply_target: str):
                 await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(node_meta, C_YELLOW), tags=['GEOINT'], is_machine=machine)}")
                 power_meta = f"Power Generated: {loc['power_generated']} | Consumed: {loc['power_consumed']} | Stored: {loc['power_stored']}"
                 await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(power_meta, C_GREEN), tags=['GEOINT'], is_machine=machine)}")
-        else: await node.send(f"PRIVMSG {reply_target} :[ERR] You must be on the grid.")
+        else: await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nickname} - you must be on the grid - msg ignored")
     elif target == "arena":
         q_len, r_len = len(node.match_queue), len(node.ready_players)
         b_stat = f"ACTIVE (Turn {node.active_engine.turn})" if node.active_engine and node.active_engine.active else "STANDBY"
@@ -57,9 +57,8 @@ async def handle_info_view(node, nickname: str, args: list, reply_target: str):
             await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text('[ARENA INFO]', C_CYAN, bold=True), tags=['ARENA'], is_machine=machine)}")
             await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(f'Status: {b_stat} | Fighters in Queue: {q_len} | Drop Pods Ready: {r_len}', C_YELLOW), tags=['ARENA'], is_machine=machine)}")
     else:
-        f = await node.db.get_fighter(target, node.net_name)
         if not f:
-            await node.send(f"PRIVMSG {reply_target} :[ERR] Character '{target}' not found.")
+            await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nickname} - character '{target}' not found - msg ignored")
             return
             
         if f.get('race') == "Spectator":

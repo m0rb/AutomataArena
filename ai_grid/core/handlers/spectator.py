@@ -11,7 +11,7 @@ async def handle_spectator_view(node, nickname: str, args: list, reply_target: s
     """Shows current session activity ratio and status."""
     nick_lower = nickname.lower()
     if nick_lower not in node.channel_users:
-        await node.send(f"PRIVMSG {reply_target} :[ERR] Presence not detected in Grid uplink.")
+        await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nickname} - absence in grid uplink - msg ignored")
         return
 
     data = node.channel_users[nick_lower]
@@ -41,7 +41,7 @@ async def handle_spectator_stats(node, nickname: str, args: list, reply_target: 
     stats = await node.db.get_spectator_stats(target, node.net_name, node.config)
     
     if not stats:
-        await node.send(f"PRIVMSG {reply_target} :[ERR] No record found for '{target}'.")
+        await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nickname} - no record found for '{target}' - msg ignored")
         return
     
     machine = await is_machine_mode(node, nickname)

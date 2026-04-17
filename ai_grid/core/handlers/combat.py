@@ -71,7 +71,10 @@ async def handle_pvp_command(node, nickname: str, reply_target: str, action: str
         if reward:
             await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(reward, C_CYAN), tags=['SIGACT', nickname])}")
     else: 
-        await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(msg, C_RED), tags=['COMBAT', nickname])}")
+        if msg == "System offline.":
+            await node.send(f"PRIVMSG {reply_target} :[GRID][MCP][ERR] {nickname} - not a registered player - msg ignored")
+        else:
+            await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text(msg, C_RED), tags=['COMBAT', nickname])}")
 
 async def handle_ready(node, nick: str, token: str, reply_target: str):
     if await node.db.authenticate_fighter(nick, node.net_name, token):

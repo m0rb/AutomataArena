@@ -170,7 +170,8 @@ class PlayerRepository:
             return reward_msg
 
     async def register_fighter(self, name: str, network: str, race: str, bot_class: str, bio: str, stats: dict):
-        logger.info(f"Attempting to register fighter: {name} on {network}")
+        reg_type = "Spectator" if race == "Spectator" else "Fighter"
+        logger.info(f"Attempting to register {reg_type}: {name} on {network}")
         auth_token = str(uuid.uuid4())
         
         async with self.async_session() as session:

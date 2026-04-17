@@ -6,21 +6,33 @@ from .base import is_machine_mode, get_action_routing
 logger = logging.getLogger("manager")
 
 async def handle_shop_view(node, nickname: str, reply_target: str):
-    items = await node.db.list_shop_items()
+    # Detect if we are at a DarkNet node
+    loc = await node.db.get_location(nickname, node.net_name)
+    is_darknet = loc.get('is_darknet', False) if loc else False
+    # Availability Check
+    if loc and loc.get('availability_mode') == 'CLOSED' and loc.get('owner') != nickname:
+        await node.send(f"{tactical_cmd} {tactical_target} :[GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Grid exploration, or more may be required to open it.")
+        return
+
+    items = await node.db.list_shop_items(is_darknet=is_darknet)
     tactical_target, broadcast_chan, machine, tactical_cmd = await get_action_routing(node, nickname, reply_target)
     
     if not items:
-        await node.send(f"{tactical_cmd} {tactical_target} :[SHOP] The marketplace is empty.")
+        msg = "[SHOP] The Underground marketplace is empty." if is_darknet else "[SHOP] The marketplace is empty."
+        await node.send(f"{tactical_cmd} {tactical_target} :{msg}")
         return
     if machine:
         parts = " ".join(f"{i['name']}:{i['cost']}c" for i in items)
         await node.send(f"{tactical_cmd} {tactical_target} :[SHOP] ITEMS:{parts}")
         return
-    await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text('[ BLACK MARKET WARES ]', C_CYAN, bold=True), tags=['ECONOMY'], is_machine=machine, nick=nickname)}")
+    market_label = "[ GLOBAL BLACK MARKET WARES ]" if is_darknet else "[ PUBLIC MARKET WARES ]"
+    await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(market_label, C_CYAN, bold=True), tags=['ECONOMY'], is_machine=machine, nick=nickname)}")
     for i in items:
         line = f"{i['name']} ({i['type']}) - {i['cost']}c"
         await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(line, C_GREEN), tags=['ECONOMY'], is_machine=machine, nick=nickname)}")
-    await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(f'To buy, travel to a Merchant node and type {node.prefix} buy <item>.', C_YELLOW), tags=['ECONOMY'], is_machine=machine, nick=nickname)}")
+    
+    hint = "To buy, type !a buy <item>." if is_darknet else "To buy, travel to a Merchant node."
+    await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(hint, C_YELLOW), tags=['ECONOMY'], is_machine=machine, nick=nickname)}")
 
 async def handle_merchant_tx(node, nickname: str, verb: str, item_name: str, reply_target: str):
     result, msg = await node.db.process_transaction(nickname, node.net_name, verb, item_name)
@@ -53,11 +65,20 @@ async def handle_auction(node, nick: str, args: list, reply_target: str):
         await node.send(f"{tactical_cmd} {tactical_target} :Usage: {node.prefix} auction <list|sell|bid>")
         return
     
-    sub = args[0].lower()
+    # Context Detection
+    loc = await node.db.get_location(nick, node.net_name)
+    is_darknet = loc.get('is_darknet', False) if loc else False
+    market_name = "UNDERGROUND" if is_darknet else "PUBLIC"
+
     if sub == "list":
-        listings = await node.db.list_active_auctions()
+        # Availability Check
+        if loc and loc.get('availability_mode') == 'CLOSED' and loc.get('owner') != nick:
+            await node.send(f"{tactical_cmd} {tactical_target} :[GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Grid exploration, or more may be required to open it.")
+            return
+
+        listings = await node.db.list_active_auctions(is_darknet=is_darknet)
         if not listings:
-            await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text('[DARKNET] The auction house is currently empty.', C_CYAN), tags=['ECONOMY'], nick=nick)}")
+            await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(f'[DARKNET] The {market_name} auction house is currently empty.', C_CYAN), tags=['ECONOMY'], nick=nick)}")
             return
         
         if machine:
@@ -65,7 +86,7 @@ async def handle_auction(node, nick: str, args: list, reply_target: str):
             await node.send(f"{tactical_cmd} {tactical_target} :[AUCTION] LIST:{parts}")
             return
 
-        await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text('[ GLOBAL DARKNET AUCTIONS ]', C_CYAN, True), tags=['ECONOMY'], is_machine=machine, nick=nick)}")
+        await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(f'[ {market_name} DARKNET AUCTIONS ]', C_CYAN, True), tags=['ECONOMY'], is_machine=machine, nick=nick)}")
         for l in listings:
             line = f"#{l['id']} | {l['item']} | Seller: {l['seller']} | Bid: {l['current_bid']}c | {l['high_bidder']} | Ends: {l['ends_in_min']}m"
             await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(line, C_GREEN), tags=['ECONOMY'], is_machine=machine, nick=nick)}")

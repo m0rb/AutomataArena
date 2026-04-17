@@ -25,7 +25,7 @@ async def handle_grid_movement(node, nick: str, direction: str, reply_target: st
     # Resolve shorthands (e.g., 'move s' -> 'move south')
     resolved_dir = DIRECTION_MAP.get(direction.lower(), direction.lower())
     
-    node_name, msg = await node.db.move_fighter(nick, node.net_name, resolved_dir)
+    node_name, msg = await node.db.move_player(nick, node.net_name, resolved_dir)
     if node_name:
         await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(msg, C_GREEN), tags=['SIGACT', nick], nick=nick)}")
         
@@ -58,7 +58,13 @@ async def handle_grid_view(node, nickname: str, reply_target: str):
         return
     if machine:
         exits = ",".join(loc['exits']) if loc['exits'] else "none"
-        line = f"NODE:{loc['name']} TYPE:{loc['type']} OWNER:{loc.get('owner','none')} LVL:{loc['level']} EXITS:{exits} POWER:{loc['power_stored']}/{loc['upgrade_level']*100} DUR:{loc.get('durability',100):.0f}"
+        line = f"NODE:{loc['name']} TYPE:{loc['type']} OWNER:{loc.get('owner','none')} LVL:{loc['level']} EXITS:{exits} POWER:{loc['power_stored']:.1f}/{loc.get('upgrade_level',1)*100} DUR:{loc.get('durability',100):.0f} AVAIL:{loc.get('availability_mode', 'OPEN')}"
+        if loc.get('irc_affinity'): line += f" AFFIN:{loc['irc_affinity']}"
+        
+        # SITREP check for Closed Grid
+        if loc.get('availability_mode') == 'CLOSED':
+            await node.send(f"{tactical_cmd} {tactical_target} :[GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Grid exploration, or more may be required to open it.")
+            
         await node.send(f"{tactical_cmd} {tactical_target} :[GRID] {line}")
         return
     node_icon = {'safezone': '🛡️', 'arena': '⚔️', 'wilderness': '🌿', 'merchant': '💰'}.get(loc['type'], '📡')
@@ -140,13 +146,13 @@ async def handle_grid_map(node, nick: str, reply_target: str):
         for line in map_text.split("\n"):
             await node.send(f"{tactical_cmd} {reply_target} :{tag_msg(line, tags=['GEOINT'], is_machine=machine, nick=nick)}")
 
-async def handle_node_probe(node, nick: str, reply_target: str):
+async def handle_node_probe(node, nick: str, reply_target: str, direction: str = None):
     """SigInt report on current nodal architecture."""
     if not await check_rate_limit(node, nick, reply_target, cooldown=15): return
     
     tactical_target, broadcast_chan, machine, tactical_cmd = await get_action_routing(node, nick, reply_target)
     
-    result = await node.db.probe_node(nick, node.net_name)
+    result = await node.db.probe_node(nick, node.net_name, direction=direction)
     if not result.get("success", True):
         await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(result.get('error', 'PROBE_FAILED'), C_RED), tags=['SIGINT', nick], nick=nick)}")
         return
@@ -165,7 +171,7 @@ async def handle_node_probe(node, nick: str, reply_target: str):
     header = format_text(f"[ SIGINT SCAN: {result['name']} ]", C_CYAN, True)
     await node.send(f"{tactical_cmd} {reply_target} :{tag_msg(header, tags=['SIGINT'], location=result['name'], nick=nick)}")
     
-    stats = f"Level: {result['level']} | Stability: {result['durability']:.1f}% | Integrity: {result['visibility']} | Threat: {result['threat']}"
+    stats = f"Level: {result['level']} | Stability: {result['durability']:.1f}% | Integrity: {result['availability']} | Threat: {result['threat']}"
     await node.send(f"{tactical_cmd} {reply_target} :{tag_msg(format_text(stats, C_GREEN), tags=['SIGINT'], nick=nick)}")
     
     # Reveal Hack DC and Bonus
@@ -191,10 +197,13 @@ async def handle_grid_command(node, nickname: str, reply_target: str, action: st
     
     if action == "claim": success, msg = await node.db.claim_node(nickname, node.net_name)
     elif action == "upgrade": success, msg = await node.db.upgrade_node(nickname, node.net_name)
+    elif action == "open": success, msg = await node.db.set_grid_mode(nickname, node.net_name, "OPEN")
+    elif action == "close": success, msg = await node.db.set_grid_mode(nickname, node.net_name, "CLOSED")
     elif action == "repair": success, msg = await node.db.grid_repair(nickname, node.net_name)
     elif action == "recharge": success, msg = await node.db.grid_recharge(nickname, node.net_name)
     elif action == "probe": 
-        await handle_node_probe(node, nickname, reply_target)
+        direction = args[0].lower() if args else None
+        await handle_node_probe(node, nickname, reply_target, direction=direction)
         return
     elif action == "siphon":
         percent = 100.0

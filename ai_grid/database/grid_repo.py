@@ -122,79 +122,74 @@ class GridRepository:
                 'durability': node.durability,
                 'threat_level': node.threat_level,
                 'is_hidden': node.is_hidden,
-                'visibility_mode': node.visibility_mode,
+                'availability_mode': node.availability_mode,
                 'irc_affinity': node.irc_affinity
             }
 
-    async def move_fighter(self, name: str, network: str, direction: str):
+    async def move_player(self, name: str, network: str, direction: str):
+        """Move 1 sector in standard directions."""
+        move_cost = CONFIG.get('mechanics', {}).get('action_costs', {}).get('move', 1.0)
         async with self.async_session() as session:
+            # 1. Identity & Affinity Resolve
             stmt = select(Character).join(Player).join(NetworkAlias).where(
                 Character.name == name,
                 NetworkAlias.nickname == name,
                 NetworkAlias.network_name == network
             ).options(
-                selectinload(Character.current_node)
-                .selectinload(GridNode.exits)
-                .selectinload(NodeConnection.target_node)
+                selectinload(Character.current_node).selectinload(GridNode.exits).selectinload(NodeConnection.target_node)
             )
-            result = await session.execute(stmt)
-            char = result.scalars().first()
+            res = await session.execute(stmt)
+            char = res.scalars().first()
             if not char: return None, "System offline."
             if not char.current_node: return None, "You are floating in the void."
             
-            # Phase 2: Power Consumption
-            move_cost = CONFIG.get('mechanics', {}).get('action_costs', {}).get('move', 1.0)
-            if char.power < move_cost:
-                return None, f"Insufficient POWER. Current: {char.power:.1f} / Need: {move_cost:.1f}"
-            
+            # 2. Local Exit Logic
             for conn in char.current_node.exits:
                 if conn.direction.lower() == direction.lower():
-                    # Phase 3: Visibility Check
-                    if conn.target_node.visibility_mode == 'CLOSED':
-                        return None, f"NETWORK ACCESS DENIED. Node '{conn.target_node.name}' is CLOSED. A system hack is required."
+                    # Phase 3: Power Check
+                    if char.power < move_cost:
+                        return None, f"Insufficient POWER. Need {move_cost} uP."
                     
                     char.node_id = conn.target_node_id
                     char.power -= move_cost
                     await session.commit()
-                    return conn.target_node.name, f"Traversed {direction} to {conn.target_node.name}. (-{move_cost} power)"
+                    
+                    msg = f"Traversed {direction} to {conn.target_node.name}. (-{move_cost} power)"
+                    if conn.target_node.availability_mode == 'CLOSED':
+                        msg += " [GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Grid exploration, or more may be required to open it."
+                    
+                    return conn.target_node.name, msg
             
-            # Bridge Traversal Logic
+            # 3. Bridge Traversal Logic
             if direction.lower() == char.current_node.irc_affinity.lower() if char.current_node.irc_affinity else None:
                 target_net = char.current_node.irc_affinity
-                # Check if target network is enabled in config
                 if not CONFIG.get('networks', {}).get(target_net.lower(), {}).get('enabled'):
-                    return None, f"CONNECTION REFUSED: Remote network '{target_net}' is currently offline or unreachable."
+                    return None, f"CONNECTION REFUSED: Remote network '{target_net}' is offline."
                 
-                # Bridging requires node to be OPEN or already controlled
-                if char.current_node.visibility_mode == 'CLOSED' and char.current_node.owner_character_id != char.id:
-                    return None, f"BRIDGE ACCESS DENIED: Local gateway '{char.current_node.name}' is CLOSED. Hack required."
+                # Bridging still requires local node to be OPEN or already controlled
+                if char.current_node.availability_mode == 'CLOSED' and char.current_node.owner_character_id != char.id:
+                    return None, f"BRIDGE ACCESS DENIED: Local gateway '{char.current_node.name}' is CLOSED. Breach required."
 
-                # Find entry node for the target network
-                # Protocol: Look for a node on net B that also has affinity to net A
-                stmt_entry = select(GridNode).where(
-                    GridNode.irc_affinity.ilike(network), # Entry back to us
-                    GridNode.name.ilike(f"{target_net}_entry") # Or specific entry name
-                )
+                # Find entry node
+                stmt_entry = select(GridNode).where(GridNode.irc_affinity.ilike(network))
                 entry_node = (await session.execute(stmt_entry)).scalars().first()
-                if not entry_node:
-                    # Fallback to the network's root node if defined, or any node with affinity
-                    stmt_fallback = select(GridNode).where(GridNode.irc_affinity.ilike(network))
-                    entry_node = (await session.execute(stmt_fallback)).scalars().first()
-                
                 if not entry_node:
                     return None, f"ROUTING ERROR: No landing sector found on network '{target_net}'."
 
-                if entry_node.visibility_mode == 'CLOSED':
-                    return None, f"REMOTE ACCESS DENIED: Landing sector '{entry_node.name}' on {target_net} is CLOSED. Remote breach required via probe/hack."
-
+                # Allow entry even if CLOSED (per new vision)
                 char.node_id = entry_node.id
-                char.power -= move_cost * 2 # Bridging is expensive
+                char.power -= move_cost * 2
                 await session.commit()
-                return entry_node.name, f"BRIDGE ESTABLISHED: Pivoted to {target_net} grid at sector {entry_node.name}. (-{move_cost*2} power)"
+                
+                msg = f"BRIDGE ESTABLISHED: Pivoted to {target_net} grid at sector {entry_node.name}. (-{move_cost*2} power)"
+                if entry_node.availability_mode == 'CLOSED':
+                    msg += " [GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Exploration or more required to open it."
+                
+                return entry_node.name, msg
 
-            return None, f"No valid route or bridge found for '{direction}'."
+            return None, f"No valid route found for '{direction}'."
 
-    async def move_fighter_to_node(self, name: str, network: str, node_name: str) -> bool:
+    async def move_player_to_node(self, name: str, network: str, node_name: str) -> bool:
         async with self.async_session() as session:
             stmt = select(Character).join(Player).join(NetworkAlias).where(
                 func.lower(Character.name) == name.lower(),
@@ -224,6 +219,10 @@ class GridRepository:
             if not char or not char.current_node: return False, "System offline."
             
             node = char.current_node
+            # Availability Check: Owner bypass
+            if node.availability_mode == 'CLOSED' and node.owner_character_id != char.id:
+                return False, "[GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Grid exploration, or more may be required to open it."
+            
             if not node.owner_character_id: return False, "You cannot repair unclaimed wilderness."
             if node.durability >= 100.0: return False, "Grid is already at maximum durability."
             if char.credits < 100.0: return False, "You need 100c to repair the node."
@@ -248,6 +247,10 @@ class GridRepository:
             if not char or not char.current_node: return False, "System offline."
             
             node = char.current_node
+            # Availability Check: Owner bypass
+            if node.availability_mode == 'CLOSED' and node.owner_character_id != char.id:
+                return False, "[GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Grid exploration, or more may be required to open it."
+
             if not node.owner_character_id: return False, "You cannot recharge unclaimed wilderness."
             if char.credits < 100.0: return False, "You need 100c to recharge power."
             
@@ -268,6 +271,10 @@ class GridRepository:
             if not char or not char.current_node: return False, "System offline."
             node = char.current_node
             
+            # Availability Check: No owner bypass for initial claim
+            if node.availability_mode == 'CLOSED':
+                return False, "[GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Grid exploration, or more may be required to open it."
+
             if node.owner_character_id:
                 if node.owner_character_id == char.id:
                     return False, "You already command this node."
@@ -293,6 +300,11 @@ class GridRepository:
             char = (await session.execute(stmt)).scalars().first()
             if not char or not char.current_node: return False, "System offline."
             node = char.current_node
+            
+            # Availability Check: Owner bypass
+            if node.availability_mode == 'CLOSED' and node.owner_character_id != char.id:
+                return False, "[GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Grid exploration, or more may be required to open it."
+
             if node.owner_character_id != char.id: return False, "You do not command this node."
             
             cost = node.upgrade_level * 500
@@ -302,6 +314,24 @@ class GridRepository:
             node.upgrade_level += 1
             await session.commit()
             return True, f"Upgraded {node.name} to Level {node.upgrade_level} for {cost}c! Max Capacity increased."
+
+    async def set_grid_mode(self, name: str, network: str, mode: str):
+        """Toggle grid availability (OPEN/CLOSED)."""
+        async with self.async_session() as session:
+            stmt = select(Character).join(Player).join(NetworkAlias).where(
+                Character.name == name,
+                NetworkAlias.nickname == name,
+                NetworkAlias.network_name == network
+            ).options(selectinload(Character.current_node))
+            char = (await session.execute(stmt)).scalars().first()
+            if not char or not char.current_node: return False, "System offline."
+            
+            node = char.current_node
+            if node.owner_character_id != char.id: return False, "You do not command this node."
+            
+            node.availability_mode = mode.upper()
+            await session.commit()
+            return True, f"Grid protocol updated: Sector {node.name} is now {mode.upper()}."
 
     async def siphon_node(self, name: str, network: str, percent: float = 100.0):
         import random
@@ -314,6 +344,10 @@ class GridRepository:
             char = (await session.execute(stmt)).scalars().first()
             if not char or not char.current_node: return False, "System offline."
             node = char.current_node
+            
+            # Availability Check: Owner bypass
+            if node.availability_mode == 'CLOSED' and node.owner_character_id != char.id:
+                return False, "[GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Grid exploration, or more may be required to open it."
             
             if not node.owner_character_id: 
                 return False, "This node is Unclaimed. Use 'explore' or 'raid' to find latent data."
@@ -392,13 +426,11 @@ class GridRepository:
             node = char.current_node
             
             if not node.owner_character_id: return False, "Node is Unclaimed."
-            if node.owner_character_id == char.id and node.visibility_mode == 'OPEN': 
-                return False, "You already command this node and its network is OPEN."
-            
             # Phase 3: Priority - Crack Integrity
             addons = json.loads(node.addons_json or "{}")
-            if node.visibility_mode == 'CLOSED':
-                difficulty = 10 + (node.upgrade_level * 3)
+            if node.availability_mode == 'CLOSED':
+                # Difficulty scales: DC = 10 + (level * 5) + (power / 1000) + (100 - stability / 10)
+                difficulty = 10 + (node.upgrade_level * 5) + int(node.power_stored / 1000) + int(10 - node.durability / 10)
                 
                 # Roll logic
                 base_roll = random.randint(1, 20) + char.alg + char.alg_bonus
@@ -410,7 +442,7 @@ class GridRepository:
                 bonus_used = char.alg_bonus
                 char.alg_bonus = 0
                 if roll >= difficulty:
-                    node.visibility_mode = 'OPEN'
+                    node.availability_mode = 'OPEN'
                     await session.commit()
                     msg = f"Network Protocol Cracked! (Rolled {roll:.1f} vs DC {difficulty}). The node is now OPEN."
                     if bonus_used: msg += f" [Used {bonus_used} bonus]"
@@ -418,6 +450,10 @@ class GridRepository:
                 else:
                     await session.commit()
                     return False, f"Hack Failed (Rolled {roll:.1f} vs DC {difficulty}). The network integrity held."
+
+            # Ownership seizure logic (only if already OPEN)
+            if node.owner_character_id == char.id and node.availability_mode == 'OPEN': 
+                return False, "You already command this node and its network is OPEN."
 
             # Ownership seizure logic (only if already OPEN)
             max_power = node.upgrade_level * 100
@@ -611,16 +647,23 @@ class GridRepository:
                 # 1. Look for hidden connections
                 hidden_conns = [c for c in node.exits if c.is_hidden]
                 if hidden_conns:
-                    target_conn = random.choice(hidden_conns)
-                    target_conn.is_hidden = False
-                    await session.commit()
+                    # DISCOVERY: Tiered Opening Logic
+                    # Simple Nodes (Unclaimed, Level 1, Power < 100) are opened by Explore
+                    is_simple = node.owner_character_id is None and node.upgrade_level == 1 and node.power_stored < 100
+                    if node.availability_mode == 'CLOSED' and is_simple:
+                        node.availability_mode = 'OPEN'
+                        msg = f"Vulnerability found in local architecture! System protocols breached. The node is now OPEN.{mob_msg}"
+                        await session.commit()
+                    else:
+                        msg = f"Vulnerability found in local architecture! Uncovering hidden route: {target_conn.direction} -> {target_conn.target_node.name}{mob_msg}"
+                    
                     return {
                         "status": "success",
                         "discovery": "hidden_exit",
                         "target_node": target_conn.target_node.name,
                         "direction": target_conn.direction,
                         "occupants": occupants,
-                        "msg": f"Vulnerability found in local architecture! Uncovering hidden route: {target_conn.direction} -> {target_conn.target_node.name}{mob_msg}"
+                        "msg": msg
                     }
                 
                 # 2. Rare data discovery
@@ -642,7 +685,7 @@ class GridRepository:
                 await session.commit()
                 return {"status": "failure", "msg": "The exploration sequence yielded no actionable data."}
 
-    async def probe_node(self, name: str, network: str) -> dict:
+    async def probe_node(self, name: str, network: str, direction: str = None) -> dict:
         """Deep scan for hardware and occupants."""
         async with self.async_session() as session:
             stmt = select(Character).join(Player).join(NetworkAlias).where(
@@ -656,19 +699,37 @@ class GridRepository:
             char = (await session.execute(stmt)).scalars().first()
             if not char or not char.current_node: return {"error": "System offline."}
             
+            node = char.current_node
+            target_direction = None
+            
+            if direction:
+                # Find the exit for the specified direction
+                conn = next((c for c in node.exits if c.direction.lower() == direction.lower()), None)
+                if not conn:
+                    return {"error": f"Invalid direction: '{direction}'. No exit detected."}
+                if conn.is_hidden:
+                    return {"error": f"Direction '{direction}' is not yet mapped. Run explore first."}
+                
+                # We probe the TARGET of the connection
+                node = conn.target_node
+                target_direction = direction
+            
             # Action Cost
             cost = CONFIG.get('mechanics', {}).get('action_costs', {}).get('probe', 10.0)
             if char.power < cost:
                 return {"error": f"Insufficient POWER. Probe requires {cost} uP."}
             
             # Noise Scaling (SIGINT)
-            difficulty = (12 + (node.upgrade_level * 2)) + (node.noise * 0.5)
+            # Probing a distance node is harder and louder
+            difficulty = (12 + (node.upgrade_level * 2)) + (char.current_node.noise * 0.5)
+            if direction: difficulty += 3
+            
             roll = random.randint(1, 20) + char.alg
             
             if roll < difficulty:
-                node.noise += 2.0 # Deep scan is loud
+                char.current_node.noise += 2.0 # Deep scan is loud
                 if random.random() < 0.35: # 35% chance of Alert/Ejection if failure is bad
-                    return {"success": False, "msg": "PROBE FAILED: MCP sensors traced your burst transmission. Structural integrity compromised."}
+                    return {"success": False, "msg": f"PROBE FAILED: MCP sensors traced your burst transmission to {node.name}. Structural integrity compromised."}
                 await session.commit()
                 return {"success": False, "msg": f"PROBE FAILED: Signals reflect was too noisy (Rolled {roll} vs DC {difficulty})."}
 
@@ -676,7 +737,14 @@ class GridRepository:
             occupants = [c.name for c in node.characters_present if c.name != name]
             
             # Visibility Detection (Now separated from Explore)
-            visibility_gate = "OPEN" if node.visibility_mode == "OPEN" else "CLOSED [BREACH REQUIRED]"
+            # Moderate Nodes (Unclaimed, Level <= 2, Power < 500) are opened by Probe
+            is_moderate = node.owner_character_id is None and node.upgrade_level <= 2 and node.power_stored < 500
+            if node.availability_mode == "CLOSED" and is_moderate:
+                node.availability_mode = "OPEN"
+                visibility_gate = "OPEN [BYPASS_PROBE]"
+                # Provide a bonus msg or something? Let's keep it in the output dict
+            else:
+                visibility_gate = "OPEN" if node.availability_mode == "OPEN" else "CLOSED [BREACH REQUIRED]"
             
             # Bridge Affinity
             bridge = f"Bridge to {node.irc_affinity}" if node.irc_affinity else "No Cross-Network affinity detected."

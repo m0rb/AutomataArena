@@ -45,7 +45,13 @@ class ArenaDB:
             uplink = GridNode(name="UpLink", description="The central nexus. A safezone where new connections manifest.", node_type="safezone", is_spawn_node=True)
             arena_node = GridNode(name="The_Arena", description="The main fighting grounds. Blood and RAM are spilled here.", node_type="arena")
             wilderness = GridNode(name="The_CPU_Socket", description="A vast wasteland of processing power. Danger lurks.", node_type="wilderness")
-            black_market = GridNode(name="Black_Market_Port", description="Shadowy merchants peddle encrypted wares here.", node_type="merchant")
+            black_market = GridNode(
+                name="Black_Market_Port", 
+                description="Shadowy merchants peddle encrypted wares here.", 
+                node_type="merchant",
+                is_darknet=True,
+                availability_mode='CLOSED'
+            )
             
             session.add_all([uplink, arena_node, wilderness, black_market])
             await session.flush()
@@ -56,14 +62,14 @@ class ArenaDB:
                 NodeConnection(source_node_id=arena_node.id, target_node_id=uplink.id, direction="south"),
                 NodeConnection(source_node_id=uplink.id, target_node_id=wilderness.id, direction="east"),
                 NodeConnection(source_node_id=wilderness.id, target_node_id=uplink.id, direction="west"),
-                NodeConnection(source_node_id=uplink.id, target_node_id=black_market.id, direction="down"),
+                NodeConnection(source_node_id=uplink.id, target_node_id=black_market.id, direction="down", is_hidden=True),
                 NodeConnection(source_node_id=black_market.id, target_node_id=uplink.id, direction="up")
             ]
             session.add_all(connections)
             
             # 3. Item Templates
             item_tpl = ItemTemplate(name="Basic_Ration", item_type="consumable", base_value=10, effects_json='{"heal": 15}')
-            rifle_tpl = ItemTemplate(name="Pulse_Rifle", item_type="weapon", base_value=100, effects_json='{"damage": 25, "type": "kinetic"}')
+            rifle_tpl = ItemTemplate(name="Pulse_Rifle", item_type="weapon", base_value=1000, is_darknet=True, effects_json='{"damage": 25, "type": "kinetic"}')
             session.add_all([item_tpl, rifle_tpl])
             
             await session.commit()

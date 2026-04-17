@@ -27,7 +27,8 @@ class GridNode(Base):
     
     # Discovery & Network Mapping
     is_hidden = Column(Boolean, default=False)
-    visibility_mode = Column(String, default='OPEN') # OPEN, CLOSED
+    availability_mode = Column(String, default='OPEN') # OPEN, CLOSED
+    is_darknet = Column(Boolean, default=False)
     irc_affinity = Column(String, nullable=True) # Mapping to IRC Network (e.g. Rizon)
     local_network = Column(String, nullable=True) # Named subnet for power pooling
     
@@ -139,6 +140,7 @@ class ItemTemplate(Base):
     name = Column(String, unique=True, nullable=False)
     item_type = Column(String) # weapon, consumable, armor, hack
     base_value = Column(Integer, default=0)
+    is_darknet = Column(Boolean, default=False)
     effects_json = Column(String, default="{}") # e.g., '{"heal": 15}'
 
 class InventoryItem(Base):
@@ -180,6 +182,7 @@ class AuctionListing(Base):
     current_bid = Column(Integer, default=0)
     highest_bidder_id = Column(Integer, ForeignKey('characters.id'), nullable=True)
     end_time = Column(DateTime, nullable=False)
+    is_darknet = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     
     seller = relationship("Character", foreign_keys=[seller_id])

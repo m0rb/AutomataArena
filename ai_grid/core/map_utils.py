@@ -12,7 +12,7 @@ def get_node_symbol(node: GridNode, char: Character, machine_mode: bool = False)
     total_stat = char.sec + char.alg
     
     # 1. Fog of War / Intel Tiers
-    if node.visibility_mode == 'CLOSED' and node.owner_character_id != char.id:
+    if node.availability_mode == 'CLOSED' and node.owner_character_id != char.id:
         if total_stat >= 60:
             # Tier 4: Full Node Name (Truncated to 5 chars for grid)
             name_trunc = node.name[:5]
@@ -27,8 +27,11 @@ def get_node_symbol(node: GridNode, char: Character, machine_mode: bool = False)
             cat = node.node_type[0].upper()
             return format_text(f"[{cat}]", C_GREY)
         
-        # Tier 1: Minimalist
-        return format_text("[??]" if not machine_mode else "[?]", C_WHITE)
+        # Tier 1: Minimalist - CLOSED but known location
+        return format_text("[X]" if not machine_mode else "[X]", C_RED)
+
+    # 1.5 Unknown Node check (Hypothetical - for now use [?])
+    # if not node.is_discovered: return format_text("[?]", C_GREY)
 
     # 2. Base Symbol Logic (Visited/Open)
     color = C_WHITE
@@ -71,7 +74,7 @@ def get_connector_symbol(source: GridNode, target: GridNode, vertical: bool = Fa
     """Return a 1-2 character connector symbol based on connection health/status."""
     # Logic: Hazard (Threat > 2) > Damaged (Durability < 70) > Closed > Normal
     
-    is_closed = source.visibility_mode == 'CLOSED' or target.visibility_mode == 'CLOSED'
+    is_closed = source.availability_mode == 'CLOSED' or target.availability_mode == 'CLOSED'
     is_damaged = source.durability < 70 or target.durability < 70
     is_hazard = (hasattr(source, 'threat_level') and source.threat_level > 2) or \
                 (hasattr(target, 'threat_level') and target.threat_level > 2)

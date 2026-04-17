@@ -9,9 +9,9 @@ class EconomyRepository:
     def __init__(self, async_session):
         self.async_session = async_session
 
-    async def list_shop_items(self):
+    async def list_shop_items(self, is_darknet: bool = False):
         async with self.async_session() as session:
-            stmt = select(ItemTemplate).order_by(ItemTemplate.base_value.asc())
+            stmt = select(ItemTemplate).where(ItemTemplate.is_darknet == is_darknet).order_by(ItemTemplate.base_value.asc())
             result = await session.execute(stmt)
             return [{'name': t.name, 'type': t.item_type, 'cost': t.base_value} for t in result.scalars().all()]
 
@@ -54,6 +54,11 @@ class EconomyRepository:
             result = await session.execute(stmt)
             char = result.scalars().first()
             if not char: return False, "System offline: Fighter not found."
+            
+            # Availability Check: Owner bypass
+            if char.current_node.availability_mode == "CLOSED" and char.current_node.owner_character_id != char.id:
+                return False, "[GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Grid exploration, or more may be required to open it."
+
             if not char.current_node or char.current_node.node_type != "merchant":
                 return False, "Transaction Failed: No merchant in this node."
                 
@@ -135,13 +140,16 @@ class EconomyRepository:
             return True, msg
 
     # --- DARKNET AUCTIONS ---
-    async def list_active_auctions(self) -> list:
+    async def list_active_auctions(self, is_darknet: bool = False) -> list:
         async with self.async_session() as session:
-            stmt = select(AuctionListing).where(AuctionListing.is_active == True).options(
+            stmt = select(AuctionListing).where(
+                AuctionListing.is_active == True,
+                AuctionListing.is_darknet == is_darknet
+            ).options(
                 selectinload(AuctionListing.seller),
                 selectinload(AuctionListing.highest_bidder),
                 selectinload(AuctionListing.item).selectinload(InventoryItem.template)
-            )
+            ).order_by(AuctionListing.end_time.asc())
             listings = (await session.execute(stmt)).scalars().all()
             return [{
                 "id": l.id,
@@ -158,9 +166,19 @@ class EconomyRepository:
                 Character.name == name,
                 NetworkAlias.nickname == name,
                 NetworkAlias.network_name == network
-            ).options(selectinload(Character.inventory).selectinload(InventoryItem.template))
+            ).options(
+                selectinload(Character.current_node),
+                selectinload(Character.inventory).selectinload(InventoryItem.template)
+            )
             char = (await session.execute(stmt)).scalars().first()
             if not char: return False, "Character offline."
+            
+            # DarkNet Check: List as DarkNet if node is DarkNet
+            is_darknet_node = char.current_node.is_darknet if char.current_node else False
+            
+            # Availability Check: Owner bypass
+            if char.current_node.availability_mode == "CLOSED" and char.current_node.owner_character_id != char.id:
+                return False, "[GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Grid exploration, or more may be required to open it."
 
             item = next((i for i in char.inventory if i.template.name.lower() == item_name.lower() and i.quantity > 0), None)
             if not item: return False, f"Item '{item_name}' not found in your inventory."
@@ -182,11 +200,13 @@ class EconomyRepository:
                 seller_id=char.id,
                 item_id=item_to_list.id,
                 current_bid=start_bid,
-                end_time=end_time
+                end_time=end_time,
+                is_darknet=is_darknet_node
             )
             session.add(new_listing)
             await session.commit()
-            return True, f"Listed {item_name} on DarkNet Auction. Starting Bid: {start_bid}c. Expires in {dur_mins}m."
+            market_type = "Underground" if is_darknet_node else "Public"
+            return True, f"Listed {item_name} on {market_type} Auction. Starting Bid: {start_bid}c. Expires in {dur_mins}m."
 
     async def bid_on_auction(self, name: str, network: str, auction_id: int, bid_amt: int) -> (bool, str):
         async with self.async_session() as session:
@@ -194,13 +214,21 @@ class EconomyRepository:
                 Character.name == name,
                 NetworkAlias.nickname == name,
                 NetworkAlias.network_name == network
-            )
+            ).options(selectinload(Character.current_node))
             char = (await session.execute(stmt)).scalars().first()
             if not char: return False, "Character offline."
 
             listing_stmt = select(AuctionListing).where(AuctionListing.id == auction_id, AuctionListing.is_active == True).options(selectinload(AuctionListing.highest_bidder))
             listing = (await session.execute(listing_stmt)).scalars().first()
             if not listing: return False, f"Auction #{auction_id} is not active."
+            
+            # Context Validation
+            if listing.is_darknet and (not char.current_node or not char.current_node.is_darknet):
+                return False, "Access Denied: DarkNet auctions require physical presence at an underground terminal."
+            
+            # Availability Check: Owner bypass (at the bidder's node)
+            if char.current_node.availability_mode == "CLOSED" and char.current_node.owner_character_id != char.id:
+                return False, "[GRID][SITREP] STATUS=CLOSED | MSG=Grid is CLOSED. Grid exploration, or more may be required to open it."
             
             if listing.seller_id == char.id: return False, "You cannot bid on your own listing."
             if bid_amt <= listing.current_bid: return False, f"Bid must be higher than current bid: {listing.current_bid}c."

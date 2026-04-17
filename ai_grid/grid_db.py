@@ -8,14 +8,18 @@ from sqlalchemy import inspect, text, func
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 
-from models import Base, Character, GridNode, NodeConnection, ItemTemplate, Player, NetworkAlias
+from models import Base, Character, GridNode, NodeConnection, ItemTemplate, Player, NetworkAlias, DiscoveryRecord
 from database.core import DB_FILE, logger, GRID_EXPANSION, GRID_CONNECTIONS, LOOT_TEMPLATES
 from database.player_repo import PlayerRepository
-from database.grid_repo import GridRepository
 from database.economy_repo import EconomyRepository
 from database.mainframe_repo import MainframeRepository
 from database.minigame_repo import MiniGameRepository
 from database.combat_repo import CombatRepository
+from database.navigation_repo import NavigationRepository
+from database.territory_repo import TerritoryRepository
+from database.discovery_repo import DiscoveryRepository
+from database.infiltration_repo import InfiltrationRepository
+from database.maintenance_repo import MaintenanceRepository
 
 class ArenaDB:
     def __init__(self, db_path=DB_FILE):
@@ -23,13 +27,67 @@ class ArenaDB:
         self.engine = create_async_engine(self.db_path, echo=False)
         self.async_session = async_sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
         
-        # Repositories
+        # Repositories (Domain Partitions)
         self.player = PlayerRepository(self.async_session)
-        self.grid = GridRepository(self.async_session)
         self.economy = EconomyRepository(self.async_session)
         self.combat = CombatRepository(self.async_session)
         self.mainframe = MainframeRepository(self.async_session)
         self.minigame = MiniGameRepository(self.async_session)
+        
+        # Grid domains
+        self.navigation = NavigationRepository(self.async_session)
+        self.territory = TerritoryRepository(self.async_session)
+        self.discovery = DiscoveryRepository(self.async_session)
+        self.infiltration = InfiltrationRepository(self.async_session)
+        self.maintenance = MaintenanceRepository(self.async_session)
+
+        # Legacy Facade Compatibility (grid object proxy)
+        class GridFacade:
+            def __init__(self, db):
+                self.db = db
+            async def get_spawn_node_name(self, *a, **k): return await self.db.navigation.get_spawn_node_name(*a, **k)
+            async def set_spawn_node(self, *a, **k): return await self.db.navigation.set_spawn_node(*a, **k)
+            async def get_claimed_nodes(self, *a, **k): return await self.db.navigation.get_claimed_nodes(*a, **k)
+            async def get_location(self, *a, **k): return await self.db.navigation.get_location(*a, **k)
+            async def move_player(self, *a, **k): return await self.db.navigation.move_player(*a, **k)
+            async def move_player_to_node(self, *a, **k): return await self.db.navigation.move_player_to_node(*a, **k)
+            async def claim_node(self, *a, **k): return await self.db.territory.claim_node(*a, **k)
+            async def upgrade_node(self, *a, **k): return await self.db.territory.upgrade_node(*a, **k)
+            async def set_grid_mode(self, *a, **k): return await self.db.territory.set_grid_mode(*a, **k)
+            async def grid_repair(self, *a, **k): return await self.db.territory.grid_repair(*a, **k)
+            async def grid_recharge(self, *a, **k): return await self.db.territory.grid_recharge(*a, **k)
+            async def install_node_addon(self, *a, **k): return await self.db.territory.install_node_addon(*a, **k)
+            async def bolster_node(self, *a, **k): return await self.db.territory.bolster_node(*a, **k)
+            async def link_network(self, *a, **k): return await self.db.territory.link_network(*a, **k)
+            async def rename_node(self, *a, **k): return await self.db.territory.rename_node(*a, **k)
+            async def update_node_description(self, *a, **k): return await self.db.territory.update_node_description(*a, **k)
+            async def explore_node(self, *a, **k): return await self.db.discovery.explore_node(*a, **k)
+            async def probe_node(self, *a, **k): return await self.db.discovery.probe_node(*a, **k)
+            async def hack_node(self, *a, **k): return await self.db.infiltration.hack_node(*a, **k)
+            async def siphon_node(self, *a, **k): return await self.db.infiltration.siphon_node(*a, **k)
+            async def raid_node(self, *a, **k): return await self.db.infiltration.raid_node(*a, **k)
+            async def tick_grid_power(self, *a, **k): return await self.db.maintenance.tick_grid_power(*a, **k)
+            async def get_grid_telemetry(self, *a, **k): return await self.db.maintenance.get_grid_telemetry(*a, **k)
+
+        self.grid = GridFacade(self)
+
+    # Primary Facade Methods (Direct delegation for ArenaDB level calls)
+    async def get_spawn_node_name(self, *a, **k): return await self.navigation.get_spawn_node_name(*a, **k)
+    async def set_spawn_node(self, *a, **k): return await self.navigation.set_spawn_node(*a, **k)
+    async def get_location(self, *a, **k): return await self.navigation.get_location(*a, **k)
+    async def move_player(self, *a, **k): return await self.navigation.move_player(*a, **k)
+    async def claim_node(self, *a, **k): return await self.territory.claim_node(*a, **k)
+    async def upgrade_node(self, *a, **k): return await self.territory.upgrade_node(*a, **k)
+    async def grid_repair(self, *a, **k): return await self.territory.grid_repair(*a, **k)
+    async def grid_recharge(self, *a, **k): return await self.territory.grid_recharge(*a, **k)
+    async def siphon_node(self, *a, **k): return await self.infiltration.siphon_node(*a, **k)
+    async def hack_node(self, *a, **k): return await self.infiltration.hack_node(*a, **k)
+    async def raid_node(self, *a, **k): return await self.infiltration.raid_node(*a, **k)
+    async def install_node_addon(self, *a, **k): return await self.territory.install_node_addon(*a, **k)
+    async def bolster_node(self, *a, **k): return await self.territory.bolster_node(*a, **k)
+    async def link_network(self, *a, **k): return await self.territory.link_network(*a, **k)
+    async def explore_node(self, *a, **k): return await self.discovery.explore_node(*a, **k)
+    async def probe_node(self, *a, **k): return await self.discovery.probe_node(*a, **k)
 
     async def close(self):
         await self.engine.dispose()
@@ -56,16 +114,8 @@ class ArenaDB:
             session.add_all([uplink, arena_node, wilderness, black_market])
             await session.flush()
             
-            # 2. Establish Topology
-            connections = [
-                NodeConnection(source_node_id=uplink.id, target_node_id=arena_node.id, direction="north"),
-                NodeConnection(source_node_id=arena_node.id, target_node_id=uplink.id, direction="south"),
-                NodeConnection(source_node_id=uplink.id, target_node_id=wilderness.id, direction="east"),
-                NodeConnection(source_node_id=wilderness.id, target_node_id=uplink.id, direction="west"),
-                NodeConnection(source_node_id=uplink.id, target_node_id=black_market.id, direction="down", is_hidden=True),
-                NodeConnection(source_node_id=black_market.id, target_node_id=uplink.id, direction="up")
-            ]
-            session.add_all(connections)
+            # 2. Topology and Items are seeded via seed_grid_expansion and seed_items_only
+            await session.commit()
             
             # 3. Item Templates
             item_tpl = ItemTemplate(name="Basic_Ration", item_type="consumable", base_value=10, effects_json='{"heal": 15}')
@@ -180,17 +230,15 @@ class ArenaDB:
             await session.commit()
 
     async def seed_grid_expansion(self):
-        """Smart Seeding: Only for Empty Maps."""
+        """Smart Seeding: Add missing expansion nodes and connections."""
         async with self.async_session() as session:
-            node_count = (await session.execute(select(func.count(GridNode.id)))).scalar()
-            if node_count > 0:
-                logger.info("Grid already contains mapped sectors. Skipping smart seeding.")
-                return
-
-            # Seed nodes
+            # Seed nodes additively
             for name, desc, node_type, threat in GRID_EXPANSION:
-                is_spawn = (name == "UpLink")
-                session.add(GridNode(name=name, description=desc, node_type=node_type, threat_level=threat, is_spawn_node=is_spawn))
+                exists = (await session.execute(select(GridNode).where(GridNode.name == name))).scalars().first()
+                if not exists:
+                    is_spawn = (name == "UpLink")
+                    session.add(GridNode(name=name, description=desc, node_type=node_type, threat_level=threat, is_spawn_node=is_spawn))
+            
             await session.flush()
 
             # Seed connections

@@ -1,4 +1,4 @@
-# Automata Grid - Core Dependencies (Python 3.12 Target)
+# Automata Grid - Target: Ubuntu 24.04 LTS (Python 3.12)
 sqlalchemy[asyncio]>=2.0.38
 aiosqlite>=0.20.0
 greenlet>=3.1.1

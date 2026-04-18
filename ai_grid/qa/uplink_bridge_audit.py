@@ -29,16 +29,21 @@ async def audit_uplink_bridge():
     async with db.async_session() as session:
         # Gateway Alpha (Local) -> Points to RemoteNet
         alpha = GridNode(name="QA_GATEWAY_ALPHA", node_type="safezone", net_affinity="RemoteNet", addons_json='{}')
-        # Gateway Beta (Remote) -> Points to LocalNet
+        session.add(alpha)
+        # Gateway Beta (Remote) -> Points to localnet
         beta = GridNode(name="QA_GATEWAY_BETA", node_type="safezone", net_affinity="localnet", addons_json='{}')
-        session.add_all([alpha, beta])
-        await session.flush()
+        session.add(beta)
+        await session.commit() # Persistent and assigned IDs
         
+    async with db.async_session() as session:
         # Setup Character
         p = Player(global_name="qa_bridge_admin")
         session.add(p)
         await session.flush()
-        char = Character(name="QA_BRIDGE_ADMIN", player_id=p.id, power=100.0, node_id=alpha.id, race="Ghost", char_class="Admin")
+        
+        # Link to alpha (refetched for ID safety)
+        alpha_id = (await session.execute(grid_db.select(GridNode).where(GridNode.name == "QA_GATEWAY_ALPHA"))).scalars().first().id
+        char = Character(name="QA_BRIDGE_ADMIN", player_id=p.id, power=100.0, node_id=alpha_id, race="Ghost", char_class="Admin")
         session.add(char)
         alias = NetworkAlias(player_id=p.id, nickname="QA_BRIDGE_ADMIN", network_name="localnet")
         session.add(alias)

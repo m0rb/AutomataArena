@@ -119,7 +119,7 @@ async def check_rate_limit(node, nick: str, reply_target: str, cooldown: int = 2
     if elapsed < cooldown:
         if not record['warned']:
             record['warned'] = True
-            tactical_target, broadcast_chan, machine = await get_action_routing(node, nick, reply_target)
+            tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nick, reply_target)
             msg = format_text(f"Anti-flood MCP triggered. Please wait {cooldown:.1f}s between commands.", C_RED)
             asyncio.create_task(node.send(f"PRIVMSG {tactical_target} :{tag_msg(msg, tags=['SIGACT', nick])}"))
         return False

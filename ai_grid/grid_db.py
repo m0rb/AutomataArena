@@ -3,13 +3,14 @@ import argparse
 import logging
 import os
 import shutil
+import json
 import datetime
 from sqlalchemy import inspect, text, func
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 
 from models import Base, Character, GridNode, NodeConnection, ItemTemplate, Player, NetworkAlias, DiscoveryRecord
-from database.core import DB_FILE, logger, GRID_EXPANSION, GRID_CONNECTIONS, LOOT_TEMPLATES
+from database.core import DB_FILE, logger, CONFIG, GRID_EXPANSION, GRID_CONNECTIONS, BRIDGE_MAPPING, LOOT_TEMPLATES
 from database.repositories.navigation_repo import NavigationRepository
 from database.repositories.territory_repo import TerritoryRepository
 from database.repositories.discovery_repo import DiscoveryRepository
@@ -240,6 +241,31 @@ class ArenaDB:
                     session.add(GridNode(name=name, description=desc, node_type=node_type, threat_level=threat, is_spawn_node=is_spawn))
             
             await session.flush()
+
+            # --- SEED BRIDGE AFFINITIES (Task 021 Fix) ---
+            for node_name, net_target in BRIDGE_MAPPING.items():
+                node = (await session.execute(select(GridNode).where(GridNode.name == node_name))).scalars().first()
+                if node:
+                    node.net_affinity = net_target
+                    logger.info(f"Seeded net_affinity: {node_name} -> {net_target}")
+
+            # --- SEED NETWORK HOME NODES (Task 021) ---
+            for net_name in CONFIG.get('networks', {}).keys():
+                node_stmt = select(GridNode).where(GridNode.name == net_name)
+                node = (await session.execute(node_stmt)).scalars().first()
+                if not node:
+                    node = GridNode(name=net_name, description=f"Entry point for the {net_name} local mesh.", node_type="wilderness")
+                    session.add(node)
+                    logger.info(f"Created Network Home Node: {net_name}")
+                
+                # Enforce standard entry parameters
+                node.availability_mode = 'OPEN'
+                node.upgrade_level = 1
+                node.net_affinity = net_name
+                node.addons_json = json.dumps({"NET": True})
+                logger.debug(f"Configured {net_name} entry: OPEN, Level 1, NET Hardware.")
+
+            await session.commit()
 
             # Seed connections
             for src_name, tgt_name, direction in GRID_CONNECTIONS:

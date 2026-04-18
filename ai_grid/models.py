@@ -29,7 +29,7 @@ class GridNode(Base):
     is_hidden = Column(Boolean, default=False)
     availability_mode = Column(String, default='OPEN') # OPEN, CLOSED
     is_darknet = Column(Boolean, default=False)
-    irc_affinity = Column(String, nullable=True) # Mapping to IRC Network (e.g. Rizon)
+    net_affinity = Column(String, nullable=True) # Mapping to Network (e.g. Rizon)
     local_network = Column(String, nullable=True) # Named subnet for power pooling
     
     # Hardware & Infrastructure

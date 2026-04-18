@@ -144,7 +144,7 @@ class DiscoveryRepository(BaseRepository):
             else:
                 visibility_gate = "OPEN" if node.availability_mode == "OPEN" else "CLOSED [BREACH REQUIRED]"
             
-            bridge = f"Bridge to {node.irc_affinity}" if node.irc_affinity else "No affinity detected."
+            bridge = f"Bridge to {node.net_affinity}" if node.net_affinity else "No affinity detected."
             hack_dc = 10 + (node.upgrade_level * 3)
             char.alg_bonus = 5
             char.credits += 15.0

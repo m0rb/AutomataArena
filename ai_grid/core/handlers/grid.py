@@ -61,8 +61,8 @@ async def handle_grid_view(node, nickname: str, reply_target: str):
     
     # Phase 3: Metadata display
     meta_str = f"Integrity: {loc.get('visibility_mode', 'OPEN')}"
-    if loc.get('visibility_mode') == 'OPEN' and loc.get('irc_affinity'):
-        meta_str += f" | Network: {loc['irc_affinity'].upper()}"
+    if loc.get('visibility_mode') == 'OPEN' and loc.get('net_affinity'):
+        meta_str += f" | Network: {loc['net_affinity'].upper()}"
     await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(meta_str, C_CYAN), tags=['GEOINT'], is_machine=machine)}")
     
     # Local Topology Mini-Map (Radius 1)
@@ -304,11 +304,11 @@ async def handle_grid_network_msg(node, nick: str, args: list, reply_target: str
     message = " ".join(args[2:])
     
     loc = await node.db.get_location(nick, node.net_name)
-    if not loc or not loc.get('irc_affinity'):
+    if not loc or not loc.get('net_affinity'):
         await node.send(f"PRIVMSG {reply_target} :{tag_msg(format_text('System Error: This node lacks a synchronized IRC bridge.', C_RED), tags=['SIGINT', nick])}")
         return
         
-    target_net = loc['irc_affinity']
+    target_net = loc['net_affinity']
     # Format the message to include the sender's origin
     formatted_msg = format_text(f"[CROSS-GRID] <{nick}@{node.net_name}> {message}", C_CYAN)
     

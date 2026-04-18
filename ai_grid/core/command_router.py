@@ -173,6 +173,18 @@ class CommandRouter:
                 await self.node.send(f"PRIVMSG {source_nick} :\x01PING {ts}\x01")
                 await self.node.send(f"PING {ts}")
 
+            # --- PHASE 8: OSINT & ANALYTICS (Task 019) ---
+            elif verb == "economy":
+                asyncio.create_task(handlers.handle_economy_osint(self.node, source_nick, reply_target))
+            elif verb == "gridpower":
+                asyncio.create_task(handlers.handle_gridpower_osint(self.node, source_nick, reply_target))
+            elif verb == "gridstability":
+                asyncio.create_task(handlers.handle_gridstability_osint(self.node, source_nick, reply_target))
+            elif verb == "networks":
+                asyncio.create_task(handlers.handle_networks_osint(self.node, source_nick, reply_target))
+            elif verb == "about":
+                asyncio.create_task(handlers.handle_about_osint(self.node, source_nick, reply_target))
+
             # 8. Admin Commands
             elif verb in ["admin", "topic", "broadcast", "shutdown", "status"]:
                 if is_admin: asyncio.create_task(handlers.handle_admin_command(self.node, source_nick, verb, args, reply_target))

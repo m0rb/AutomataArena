@@ -12,7 +12,6 @@ async def hype_loop(node):
     while True:
         try:
             await asyncio.sleep(2700) 
-            await node.set_dynamic_topic()
             if not node.active_engine:
                 hype_msg = await node.llm.generate_hype()
                 if not hype_msg.startswith("ERROR"):
@@ -207,3 +206,20 @@ async def hype_drop_loop(node):
             break
         except Exception as e:
             logger.error(f"Hype drop loop error: {e}")
+
+async def topic_engine_loop(node):
+    """Rotates the channel topic through different intelligence modes (Task 018)."""
+    await asyncio.sleep(60) # Stagger start
+    while True:
+        try:
+            await node.set_dynamic_topic()
+            # Default to 15m if not set
+            interval = getattr(node, 'topic_interval', 15)
+            await asyncio.sleep(interval * 60)
+            # Cycle through 4 modes
+            node.topic_mode = (node.topic_mode + 1) % 4
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Topic engine error on {node.net_name}: {e}")
+            await asyncio.sleep(60)

@@ -3,17 +3,65 @@ import asyncio
 import logging
 from grid_combat import CombatEngine, Entity
 from grid_combat import CombatEngine, Entity
-from grid_utils import format_text, tag_msg, ICONS, C_GREEN, C_CYAN, C_RED, C_YELLOW
+from grid_utils import (
+    format_text, tag_msg, ICONS, C_GREEN, C_CYAN, C_RED, C_YELLOW, C_BLUE, C_PURPLE,
+    C_ORANGE, C_L_GREEN, C_PINK, generate_gradient, generate_meter,
+    TOPIC_START, TOPIC_END, TOPIC_SEP
+)
 from grid_combat import CombatEngine, Entity
 
 logger = logging.getLogger("manager")
 
 async def set_dynamic_topic(node):
+    """Generates and sets a high-aesthetic, multi-mode channel topic."""
+    mode = getattr(node, 'topic_mode', 0)
+    
+    # 1. Gather Core Telemetry
     players = await node.db.list_players(node.net_name)
     node.registered_bots = len(players)
-    raw_topic = await node.llm.generate_topic(node.registered_bots, node.net_name)
-    fmt_topic = f"{ICONS['ARENA']} {format_text('THE GRID', C_CYAN, bold=True)} | {raw_topic} | {ICONS['CROSS-GRID']} Cross-Grid Active"
-    await node.send(f"TOPIC {node.config['channel']} :{fmt_topic}")
+    
+    # 2. Mode-Specific Construction
+    try:
+        if mode == 0: # STATUS
+            title = "H U B   O P E R A T I O N S"
+            gradient_title = generate_gradient(title, [C_CYAN, C_L_BLUE, C_BLUE])
+            
+            match_status = format_text("ACTIVE", C_GREEN) if node.active_engine else "STANDBY"
+            # Use 50 as a reference capacity for the meter
+            bot_meter = generate_meter(node.registered_bots, 50)
+            content = f"ARENA: {match_status} | LOAD: [{bot_meter}] {node.registered_bots} UNITS"
+            
+        elif mode == 1: # INTEL
+            title = "G R I D   T E L E M E T R Y"
+            gradient_title = generate_gradient(title, [C_YELLOW, C_ORANGE, C_RED])
+            
+            grid = await node.db.get_grid_telemetry()
+            mesh_meter = generate_meter(grid['claimed_nodes'], grid['total_nodes'])
+            content = f"MESH: [{mesh_meter}] {grid['claimed_percent']:.1f}% | PWR: {grid['total_power']:.0f}uP"
+            
+        elif mode == 2: # NEWS
+            title = "S I G I N T   T I C K E R"
+            gradient_title = generate_gradient(title, [C_L_GREEN, C_GREEN, C_CYAN])
+            # news = await node.llm.generate_topic(node.registered_bots, node.net_name)
+            # Actually, use generate_hype for a better ticker feel if no match is active
+            news = await node.llm.generate_topic(node.registered_bots, node.net_name)
+            content = news[:90] + "..." if len(news) > 90 else news
+            
+        else: # EVENTS
+            title = "A C T I V E   P R O T O C O L S"
+            gradient_title = generate_gradient(title, [C_PINK, C_PURPLE, C_BLUE])
+            hype_meter = generate_meter(node.hype_counter, 15)
+            queue_len = len(node.match_queue)
+            content = f"QUEUE: {queue_len} READY | HYPE: [{hype_meter}] Resonance Burst"
+
+        # 3. Final Assembly
+        fmt_topic = f"{TOPIC_START}{gradient_title}{TOPIC_SEP}{content}{TOPIC_END}"
+        await node.send(f"TOPIC {node.config['channel']} :{fmt_topic}")
+        
+    except Exception as e:
+        logger.error(f"Failed to set dynamic topic: {e}")
+        # Fallback to simple topic
+        await node.send(f"TOPIC {node.config['channel']} :[GRID] Hub active. Version ARCHIVE 1.7.x")
 
 async def trigger_arena_call(node):
     if not node.active_engine or not node.active_engine.active:

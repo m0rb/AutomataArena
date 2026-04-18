@@ -143,6 +143,41 @@ def tag_msg(text: str, tags: list = None, location: str = None, is_machine: bool
     
     return f"{p_grid} {p_tags} {text}"
 
+# --- Topic Aesthetics (Task 018) ---
+TOPIC_START = "『 "
+TOPIC_END   = " 』"
+TOPIC_SEP   = "  ░▒▓  "
+
+def generate_gradient(text: str, colors: list) -> str:
+    """Spreads a list of IRC colors across a string character-by-character."""
+    if not text or not colors:
+        return str(text)
+    
+    result = ""
+    clean_text = str(text)
+    for i, char in enumerate(clean_text):
+        if char == " ":
+            result += " "
+            continue
+        # Distribute colors across the length
+        color_idx = int((i / len(clean_text)) * len(colors))
+        color_idx = min(color_idx, len(colors) - 1)
+        result += f"\x03{colors[color_idx]}{char}\x03"
+    return result
+
+def generate_meter(val, max_val, length=10) -> str:
+    """Generates a high-aesthetic [▓▓▓░░░] style telemetry meter."""
+    try:
+        val = float(val); max_val = float(max_val)
+        if max_val <= 0: return "░" * length
+        percent = min(1.0, max(0.0, val / max_val))
+        filled = int(percent * length)
+        empty = length - filled
+        return "▓" * filled + "░" * empty
+    except Exception as e:
+        logger.error(f"Meter generation error: {e}")
+        return "░" * length
+
 def build_banner(text: str, is_machine: bool = False) -> str:
     """
     DEPRECATED: Legacy wrapper for [GRID] banner logic. 

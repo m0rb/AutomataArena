@@ -62,6 +62,10 @@ class GridNode:
         self.hype_counter = 0
         self.router = CommandRouter(self)
         
+        # Topic Engine State (Task 018)
+        self.topic_mode = 0
+        self.topic_interval = 15 # Minutes
+        
         # Outbound Pacing & Pref Cache (Per Network)
         self.out_queue = asyncio.Queue()
         self.last_send_ts = 0
@@ -156,6 +160,7 @@ class GridNode:
         asyncio.create_task(loops.auction_loop(self))
         asyncio.create_task(loops.economic_ticker_loop(self))
         asyncio.create_task(loops.hype_drop_loop(self))
+        asyncio.create_task(loops.topic_engine_loop(self))
         await self.db.seed_grid_expansion()
         await self.listen_loop()
 

@@ -202,6 +202,30 @@ async def handle_admin_command(node, admin_nick: str, verb: str, args: list, rep
             else:
                 await node.send(f"PRIVMSG {admin_nick} :{tag_msg(f'[ERR] Syntax: {node.prefix} admin nickidentify <network> <password>', tags=['OSINT'])}")
                 
+        elif verb == "chantopic":
+            # Handle !a admin chantopic rotate <min>
+            if len(args) >= 2 and args[0].lower() == "rotate":
+                try:
+                    new_interval = int(args[1])
+                    if new_interval < 1 and new_interval != 0:
+                        raise ValueError("Interval must be >= 1 or 0.")
+                    
+                    if new_interval != 0:
+                        node.topic_interval = new_interval
+                        
+                    # Manual increment mode and trigger
+                    node.topic_mode = (node.topic_mode + 1) % 4
+                    from core.arena import set_dynamic_topic
+                    await set_dynamic_topic(node)
+                    
+                    status = f"Mode: {node.topic_mode} | Interval: {node.topic_interval}m"
+                    msg = format_text(f"Topic Engine synchronized. {status}", C_CYAN)
+                    await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(msg, tags=['SIGINT'], nick=admin_nick)}")
+                except Exception as e:
+                    logger.error(f"Topic rotate error: {e}")
+                    await node.send(f"{tactical_cmd} {tactical_target} :[ERR] Syntax: {node.prefix} admin chantopic rotate <min>")
+            else:
+                await node.send(f"{tactical_cmd} {tactical_target} :[ERR] Syntax: {node.prefix} admin chantopic rotate <min>")
     elif verb == "restart":
         msg = tag_msg(format_text('MAINFRAME RESTART INITIATED BY ADMIN.', C_YELLOW, True), tags=['SIGACT'], nick=admin_nick)
         await node.send(f"PRIVMSG {node.config['channel']} :{msg}", immediate=True)

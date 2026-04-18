@@ -136,8 +136,9 @@ async def handle_node_probe(node, nick: str, reply_target: str):
     tactical_target, broadcast_chan, machine, tactical_cmd = await get_action_routing(node, nick, reply_target)
     
     result = await node.db.probe_node(nick, node.net_name)
-    if not result.get("success", True):
-        await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(result.get('error', 'PROBE_FAILED'), C_RED), tags=['SIGINT', nick])}")
+    if not result.get("success") or "error" in result:
+        err_msg = result.get('error') or result.get('msg') or 'PROBE_FAILED'
+        await node.send(f"{tactical_cmd} {tactical_target} :{tag_msg(format_text(err_msg, C_RED), tags=['SIGINT', nick])}")
         return
 
     if machine:
@@ -151,7 +152,8 @@ async def handle_node_probe(node, nick: str, reply_target: str):
         return
 
     # User Output
-    header = format_text(f"[ SIGINT SCAN: {result['name']} ]", C_CYAN, True)
+    node_name = result.get('name', 'UNKNOWN_NODE')
+    header = format_text(f"[ SIGINT SCAN: {node_name} ]", C_CYAN, True)
     await node.send(f"{tactical_cmd} {reply_target} :{tag_msg(header, tags=['SIGINT'], location=result['name'])}")
     
     stats = f"Level: {result['level']} | Stability: {result['durability']:.1f}% | Integrity: {result['visibility']} | Threat: {result['threat']}"

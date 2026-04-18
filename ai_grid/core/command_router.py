@@ -32,9 +32,12 @@ class CommandRouter:
                     asyncio.create_task(handlers.handle_grid_map(self.node, source_nick, reply_target))
                 elif args and args[0].lower() == "claimed":
                     asyncio.create_task(handlers.handle_grid_claimed(self.node, source_nick, args, reply_target))
-                elif args and args[0].lower() in ["probe", "install", "bolster", "link", "siphon"]:
+                elif args and args[0].lower() in ["probe", "install", "bolster", "link", "siphon", "hardware", "hw", "hack"]:
                     # !a grid <action> <args>
-                    asyncio.create_task(handlers.handle_grid_command(self.node, source_nick, reply_target, args[0].lower(), args[1:]))
+                    if args[0].lower() in ["hardware", "hw"]:
+                        asyncio.create_task(handlers.handle_grid_hardware(self.node, source_nick, reply_target, args[1].lower() if len(args) > 1 else None, args[2:]))
+                    else:
+                        asyncio.create_task(handlers.handle_grid_command(self.node, source_nick, reply_target, args[0].lower(), args[1:]))
                 else:
                     asyncio.create_task(handlers.handle_grid_view(self.node, source_nick, reply_target))
             elif verb == "move":
@@ -172,6 +175,18 @@ class CommandRouter:
                 self.node.pending_pings[ts] = {'source': source_nick, 'reply_target': reply_target, 'start': float(ts), 'client_latency': None, 'server_latency': None}
                 await self.node.send(f"PRIVMSG {source_nick} :\x01PING {ts}\x01")
                 await self.node.send(f"PING {ts}")
+
+            # --- PHASE 8: OSINT & ANALYTICS (Task 019) ---
+            elif verb == "economy":
+                asyncio.create_task(handlers.handle_economy_osint(self.node, source_nick, reply_target))
+            elif verb == "gridpower":
+                asyncio.create_task(handlers.handle_gridpower_osint(self.node, source_nick, reply_target))
+            elif verb == "gridstability":
+                asyncio.create_task(handlers.handle_gridstability_osint(self.node, source_nick, reply_target))
+            elif verb == "networks":
+                asyncio.create_task(handlers.handle_networks_osint(self.node, source_nick, reply_target))
+            elif verb == "about":
+                asyncio.create_task(handlers.handle_about_osint(self.node, source_nick, reply_target))
 
             # 8. Admin Commands
             elif verb in ["admin", "topic", "broadcast", "shutdown", "status"]:

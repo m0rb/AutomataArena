@@ -4,16 +4,17 @@ import time
 from grid_utils import format_text, tag_msg, C_GREEN, C_CYAN, C_RED, C_YELLOW, C_WHITE
 
 async def handle_help(node, nick: str, args: list, reply_target: str):
-    """Displays a comprehensive list of all v1.6.0 commands or details for a specific verb."""
+    """Displays a comprehensive list of all v1.6.4 commands or details for a specific verb."""
     
     tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nick, reply_target)
     
-    # Detailed Command Registry
+    # Detailed Command Registry (v1.6.4)
     registry = {
         "register": {"desc": "Found your digital persona.", "syntax": "register <Name> <Race> <Class> <Traits>"},
         "grid": {"desc": "Diagnostic view of the current node.", "syntax": "grid"},
         "move": {"desc": "Travel to an adjacent node.", "syntax": "move <n/s/e/w>"},
         "explore": {"desc": "Scan sector for hidden architecture or fragments.", "syntax": "explore", "cost": "20u Power"},
+        "probe": {"desc": "Deep scan of a specific node to reveal security weaknesses.", "syntax": "probe", "cost": "15u Power"},
         "map": {"desc": "Generate topological visualization. Radius scales with SEC/ALG.", "syntax": "map"},
         "info": {"desc": "Targeted diagnostics.", "syntax": "info [grid|arena|<nick>]"},
         "tasks": {"desc": "View active objectives and harvest rewards.", "syntax": "tasks"},
@@ -34,6 +35,12 @@ async def handle_help(node, nick: str, args: list, reply_target: str):
         "hack": {"desc": "Sabotage foreign node integrity or siphon data.", "syntax": "hack", "cost": "30u Power"},
         "raid": {"desc": "Rapid resource extraction from a local node.", "syntax": "raid"},
         "breach": {"desc": "Brute-force entry into high-sec architectures.", "syntax": "breach"},
+        "siphon": {"desc": "Forcible extraction from a rival grid node.", "syntax": "siphon grid"},
+        "install": {"desc": "Permanently attach hardware addons (AMP/IDS/FIREWALL) to a node.", "syntax": "install <item_name>"},
+        "bolster": {"desc": "Reinforce node stability with manual power allocation.", "syntax": "bolster <amount>"},
+        "link": {"desc": "Establish a neural link with a local network alias.", "syntax": "link <alias>"},
+        "net": {"desc": "Alias for 'link'. Verifies network bridge protocols.", "syntax": "net <alias>"},
+        "memos": {"desc": "Access received alerts, alarms, and historical memos.", "syntax": "memos [list|read|del] [id]"},
         "guess": {"desc": "Submit a decryption sequence code.", "syntax": "guess <code>"},
         "dice": {"desc": "PvP credit gambling.", "syntax": "dice <amt> <nick>"},
         "top": {"desc": "View global High Roller leaderboards.", "syntax": "top"},
@@ -43,14 +50,27 @@ async def handle_help(node, nick: str, args: list, reply_target: str):
         "ready": {"desc": "Commit to an arena drop sequence.", "syntax": "ready <token>"},
         "powergen": {"desc": "Active stability-based power generation.", "syntax": "powergen"},
         "train": {"desc": "Recover status and stability via training.", "syntax": "train"},
-        "siphon": {"desc": "Forcible extraction from a rival grid node.", "syntax": "siphon grid"},
         "spectator": {"desc": "View or join the IdleRPG. Ranks earn credits by idling.", "syntax": "spectator [stats]"},
         "news": {"desc": "Display the latest Grid SIGACTs/News ticker.", "syntax": "news"},
         "engage": {"desc": "Step into a pending Grid Bug encounter.", "syntax": "engage"},
         "flee": {"desc": "Retreat from an encounter to a safe node.", "syntax": "flee"},
         "ping": {"desc": "Verify network latency to the Mainframe.", "syntax": "ping"},
-        "admin": {"desc": "Access high-level mainframe overrides.", "syntax": "admin <subcommand>"}
+        "admin": {"desc": "Access high-level mainframe overrides.", "syntax": "admin <status|nickregister|nickconfirm>"}
     }
+
+    if machine:
+        if args:
+            verb = args[0].lower()
+            if verb in registry:
+                info = registry[verb]
+                await node.send(f"PRIVMSG {tactical_target} :[HELP] CMD:{verb.upper()} DESC:{info['desc']} SYNTAX:{node.prefix} {info['syntax']}")
+            else:
+                await node.send(f"PRIVMSG {tactical_target} :[HELP][ERR] CMD_NOT_FOUND:{verb}")
+        else:
+            # High-level overview only for AIs
+            all_verbs = ",".join(sorted(registry.keys()))
+            await node.send(f"PRIVMSG {tactical_target} :[HELP] VERBS:{all_verbs}")
+        return
 
     if args:
         verb = args[0].lower()
@@ -67,17 +87,17 @@ async def handle_help(node, nick: str, args: list, reply_target: str):
             await node.send(f"PRIVMSG {tactical_target} :[ERR] Command '{verb}' not found in registry.")
         return
 
-    # Generic Categorical Help
+    # Generic Categorical Help (Human Mode Only)
     help_categories = {
-        "🧭 NAVIGATION": ["grid", "move", "explore", "map", "flee"],
-        "🆔 IDENTITY": ["register", "info", "tasks", "options", "spectator", "news"],
+        "🧭 NAVIGATION": ["grid", "move", "explore", "probe", "map", "flee"],
+        "🆔 IDENTITY": ["register", "info", "tasks", "options", "spectator", "news", "memos"],
         "💰 ECONOMY": ["shop", "buy/sell", "auction", "market"],
         "🏗️ THE GIBSON": ["mainframe", "compile", "assemble", "use"],
-        "⚔️ TACTICAL": ["claim", "upgrade", "hack/raid", "repair", "siphon", "powergen", "train"],
+        "⚔️ TACTICAL": ["claim", "upgrade", "hack/raid", "repair", "siphon", "install", "bolster", "link/net", "powergen", "train"],
         "🎮 GAMES": ["cipher/guess", "dice", "top", "attack/rob", "queue/ready", "engage"]
     }
 
-    await node.send(f"PRIVMSG {tactical_target} :{tag_msg(format_text('[ THE GRID v1.6.0 - COMMAND INTERFACE ]', C_CYAN, bold=True), tags=['OSINT'])}")
+    await node.send(f"PRIVMSG {tactical_target} :{tag_msg(format_text('[ THE GRID v1.6.4 - COMMAND INTERFACE ]', C_CYAN, bold=True), tags=['OSINT'])}")
     for cat, cmds in help_categories.items():
         cmd_str = ", ".join([f"{node.prefix} {c}" for c in cmds])
         await node.send(f"PRIVMSG {tactical_target} :{tag_msg(format_text(cat, C_YELLOW) + ': ' + format_text(cmd_str, C_WHITE), tags=['OSINT'])}")
@@ -99,7 +119,7 @@ async def check_rate_limit(node, nick: str, reply_target: str, cooldown: int = 2
     if elapsed < cooldown:
         if not record['warned']:
             record['warned'] = True
-            tactical_target, broadcast_chan, machine = await get_action_routing(node, nick, reply_target)
+            tactical_target, broadcast_chan, machine, _ = await get_action_routing(node, nick, reply_target)
             msg = format_text(f"Anti-flood MCP triggered. Please wait {cooldown:.1f}s between commands.", C_RED)
             asyncio.create_task(node.send(f"PRIVMSG {tactical_target} :{tag_msg(msg, tags=['SIGACT', nick])}"))
         return False

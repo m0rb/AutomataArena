@@ -58,11 +58,12 @@ def load_character():
 
 def save_character(payload):
     try:
+        abs_path = os.path.abspath(CHARACTER_FILE)
         with open(CHARACTER_FILE, 'w') as f:
             json.dump(payload, f, indent=4)
-        logger.info(f"Character state successfully saved to disk ({CHARACTER_FILE}).")
+        logger.info(f"Character state successfully saved to disk ({abs_path}).")
     except Exception as e:
-        logger.exception(f"Critical Error saving {CHARACTER_FILE}: {e}")
+        logger.exception(f"Critical Error saving {CHARACTER_FILE} to {os.path.abspath(CHARACTER_FILE)}: {e}")
 
 def call_llm(arena_state, char_data, memory_buffer):
     headers = {"Content-Type": "application/json"}
@@ -339,6 +340,7 @@ class AutomataBot:
                 logger.info(f"NOTICE_RECV: {source_nick} -> {target}: {msg}")
                 if source_nick == MANAGER:
                     if msg.startswith("[SYS_PAYLOAD]"):
+                        logger.debug(f"Intercepted [SYS_PAYLOAD] from {source_nick}")
                         payload_json = msg.replace("[SYS_PAYLOAD]", "").strip()
                         logger.info(f"NOTICE_RECV: {source_nick} -> {target} [SYS_PAYLOAD]")
                         logger.debug(f"Payload Content: {payload_json}")

@@ -28,9 +28,9 @@ async def audit_uplink_bridge():
     # 1. Setup Environment
     async with db.async_session() as session:
         # Gateway Alpha (Local) -> Points to RemoteNet
-        alpha = GridNode(name="QA_GATEWAY_ALPHA", node_type="safezone", irc_affinity="RemoteNet", addons_json='{}')
+        alpha = GridNode(name="QA_GATEWAY_ALPHA", node_type="safezone", net_affinity="RemoteNet", addons_json='{}')
         # Gateway Beta (Remote) -> Points to LocalNet
-        beta = GridNode(name="QA_GATEWAY_BETA", node_type="safezone", irc_affinity="localnet", addons_json='{}')
+        beta = GridNode(name="QA_GATEWAY_BETA", node_type="safezone", net_affinity="localnet", addons_json='{}')
         session.add_all([alpha, beta])
         await session.flush()
         

@@ -83,21 +83,35 @@ async def handle_networks_osint(node, source, target):
     if machine:
         nets = []
         for net in node.hub.nodes.values():
-            nets.append(f"{net.net_name}:{getattr(net, 'registered_bots', 0)}")
+            status = "ONLINE" if net.irc.is_connected() else "OFFLINE"
+            nets.append(f"{net.net_name}:{status}:{getattr(net, 'registered_bots', 0)}")
         report = f"[OSINT] TOPOLOGY|NETS:" + ",".join(nets)
         await node.send(f"PRIVMSG {tactical_target} :{report}")
         return
 
-    title = generate_gradient("N E T_W O R K   T O P O L O G Y", [C_PURPLE, C_PINK, C_CYAN])
-    await node.send(f"PRIVMSG {target} :{ICONS['OSINT']} {title}")
+    all_nodes = list(node.hub.nodes.values())
+    net_count = len(all_nodes)
     
-    for net in node.hub.nodes.values():
-        prefix = "●"
-        status = "ONLINE"
+    # Build the compact network list
+    net_entries = []
+    for net in all_nodes:
+        is_up = net.irc.is_connected()
+        status_text = "ONLINE" if is_up else "OFFLINE"
+        status_color = C_GREEN if is_up else C_RED
+        
+        # Format: Name [#channel] (STATUS)
+        fmt_status = format_text(f"({status_text})", status_color)
         chan = net.config.get('channel', 'unknown')
-        participants = getattr(net, 'registered_bots', 0)
-        info = f"{prefix} {net.net_name} [{chan}] - {participants} registered AI nodes ({status})"
-        await node.send(f"PRIVMSG {target} :{info}")
+        net_entries.append(f"{net.net_name} [{chan}] {fmt_status}")
+
+    combined_nets = " - ".join(net_entries)
+    
+    # Aesthetics: [GRID][NETWORKS] - <count> IRC networks - <list>
+    p_grid = format_text("[GRID]", C_YELLOW)
+    p_nets = format_text("[NETWORKS]", C_CYAN)
+    
+    report = f"{p_grid}{p_nets} - {net_count} IRC networks - {combined_nets}"
+    await node.send(f"PRIVMSG {target} :{report}")
 
 async def handle_about_osint(node, source, target):
     """Broadcasting core project metadata."""

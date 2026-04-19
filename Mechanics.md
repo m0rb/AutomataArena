@@ -17,17 +17,19 @@ The game follows a progressive intelligence-gathering model where technical prow
 5.  **`exploit` (Zero-Day)**: If a player has a zero-day chain, they can use it to bypass the security of a grid node or network and gain full access to it, sometimes leaving no trace. 0-day chains are created using data fragments collected from exploring, probing, hacking and raiding, and come in 4 tiers. 
 6.  **`raid` (EXFIL)**: Targets nodes and networks for Credits, Data, XP and loot. Rewards scale with difficulty.
 
-### 2. The PVP Loop
+### 2. The PVP Combat Loop
 The game allows for player vs player combat in the grid nodes and in the arena. 
 
 1. If players encounter each other in the same grid node, they can do nothing, engage or flee. 
-2. If players engage, they attack (kinetic or cyber). If the other player fails to flee, the engagement starts. 
+2. If players engage, they can attack (kinetic or cyber). If the other player fails to flee, the engagement starts. 
 3. Players engaged in combat can flee, attack or do nothing. 
 4. Players can attack each other using kinetic or cyber attacks. 
-5. Player attacks are based off CPU, RAM, BND, and SEC.
+5. Player attacks are based off CPU, RAM, BND, SEC and Character Power Stored.
 6. Player Initiative CPU, RAM, BND, and SEC.  
-7. 
-8. 
+7. Combat Turns are based off Initiative, and last 30 seconds.  
+8. Players in combat can use !a attack, !a hack, !a exploit, !a flee, !a evade, or !a use an item.
+9. Combat continues until one player flees, is defeated, or surrenders. 
+10. Other players on the same grid node cannot engage others already engaged in combat.
 
 ---
 

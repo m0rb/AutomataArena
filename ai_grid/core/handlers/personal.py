@@ -114,7 +114,8 @@ async def handle_options(node, nickname: str, args: list, reply_target: str):
         "output": ("output_mode", {"human": "human", "machine": "machine"}),
         "msgtype": ("msg_type", {"privmsg": "privmsg", "notice": "notice", "priv": "privmsg"}),
         "memo": ("memo_target", {"irc": "irc", "grid": "grid"}),
-        "briefings": ("briefings_enabled", {"on": True, "off": False})
+        "briefings": ("briefings_enabled", {"on": True, "off": False}),
+        "autosell": ("auto_sell", {"on": True, "off": False})
     }
     prefs = await node.db.get_prefs(nickname, node.net_name)
     
@@ -130,7 +131,7 @@ async def handle_options(node, nickname: str, args: list, reply_target: str):
                 "output_mode": "Output Mode", 
                 "tutorial_mode": "Tutorial Tips", 
                 "reminders": "Reminders", 
-                "auto_sell_trash": "Auto-Sell Trash",
+                "auto_sell": "Auto-Sell",
                 "msg_type": "Message Type"
             }
             for k, l in labels.items():
